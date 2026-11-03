@@ -6,16 +6,17 @@ import QuickLog from './components/QuickLog';
 import CalendarView from './components/CalendarView';
 import Settings from './components/Settings';
 import { Card } from './components/ui';
+import { Icons } from './components/icons';
 
 const Trends = lazy(() => import('./components/Trends'));
 
 type Tab = 'log' | 'calendar' | 'trends' | 'settings';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'log', label: 'Erfassen', icon: '＋' },
-  { id: 'calendar', label: 'Kalender', icon: '🗓' },
-  { id: 'trends', label: 'Verlauf', icon: '📈' },
-  { id: 'settings', label: 'Mehr', icon: '⚙' },
+const TABS: { id: Tab; label: string; icon: (typeof Icons)['Plus'] }[] = [
+  { id: 'log', label: 'Erfassen', icon: Icons.Plus },
+  { id: 'calendar', label: 'Kalender', icon: Icons.Calendar },
+  { id: 'trends', label: 'Verlauf', icon: Icons.Chart },
+  { id: 'settings', label: 'Mehr', icon: Icons.Gear },
 ];
 
 function App() {
@@ -78,7 +79,7 @@ function App() {
               onClick={() => setTab(t.id)}
               className={`py-3 text-xs font-bold ${tab === t.id ? 'text-cyber-green' : 'text-slate-500'}`}
             >
-              <span className="block text-lg leading-none mb-1">{t.icon}</span>
+              <t.icon size={24} weight="regular" className="mx-auto mb-1" aria-hidden />
               {t.label}
             </button>
           ))}

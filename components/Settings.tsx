@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
+import { loadProfile, saveProfile } from '../lib/profile';
 import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
-import { Button, Card, ErrorBox, TextField } from './ui';
+import { Button, Card, ErrorBox, NumberField, TextField } from './ui';
 
 const GUIDE_URL = 'https://github.com/mariushui/AI-Recomp-Coach-Fitness/blob/main/docs/KURZBEFEHL.md';
 export const SHORTCUT_NAME = 'Recomp Health';
@@ -17,6 +18,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 
 const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ session, onDataChanged }) => {
   const [name, setName] = useState<string | undefined>();
+  const [height, setHeight] = useState<number | undefined>();
   const [token, setToken] = useState<string | null>(null);
   const [lastUsed, setLastUsed] = useState<string | null | undefined>();
   const [legacyJson, setLegacyJson] = useState<string | undefined>();
@@ -25,12 +27,12 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => setName(data?.display_name ?? undefined));
+    loadProfile(session.user.id)
+      .then((p) => {
+        setName(p.display_name ?? undefined);
+        setHeight(p.height_cm ?? undefined);
+      })
+      .catch(() => undefined);
     supabase
       .from('ingest_tokens')
       .select('last_used_at')
@@ -67,9 +69,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
 
   const saveName = () =>
     run(async () => {
-      const { error } = await supabase.from('profiles').update({ display_name: name ?? null }).eq('id', session.user.id);
-      if (error) throw error;
-      setMsg('Name gespeichert.');
+      await saveProfile(session.user.id, { display_name: name ?? null, height_cm: height ?? null });
+      setMsg('Profil gespeichert.');
     });
 
   const createToken = () =>
@@ -132,6 +133,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       <Section title="Profil">
         <p className="text-sm text-slate-400">{session.user.email}</p>
         <TextField label="Name" value={name} onChange={setName} />
+        <NumberField label="Körpergröße" unit="cm" value={height} onChange={setHeight} />
+        <p className="text-xs text-slate-500">Wird nur für den BMI im Verlauf gebraucht.</p>
         <Button variant="ghost" onClick={saveName}>
           Speichern
         </Button>
@@ -139,7 +142,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
 
       <Section title="Apple Health">
         <p className="text-sm text-slate-300">
-          Ein iOS-Kurzbefehl schickt Gewicht, Körperfett, Schlaf, HRV, Ruhepuls und VO2max an die App. Er sendet immer die letzten 3 Tage. Fällt ein Lauf aus, holt der nächste die Werte nach.
+          Ein iOS-Kurzbefehl schickt Gewicht, Körperfett, Schlaf, HRV, Ruhepuls, VO2max, Blutsauerstoff und Schritte an die App. Er sendet immer die letzten 3 Tage. Fällt ein Lauf aus, holt der nächste die Werte nach.
         </p>
         <p className="text-sm text-slate-400">
           Status:{' '}

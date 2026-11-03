@@ -7,7 +7,8 @@ import {
   type EntryKind,
   type StrengthSet,
 } from '../supabase/functions/_shared/domain';
-import { KIND_ICON, summarize } from '../lib/format';
+import { summarize } from '../lib/format';
+import { EntryIcon, Icons } from './icons';
 import { fromInputValue, toInputValue } from '../lib/time';
 import { Card, NumberField, ScaleField, SelectField, TextField, Label } from './ui';
 
@@ -43,7 +44,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
   return (
     <Card className="!p-0 overflow-hidden">
       <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-start gap-3 p-4 text-left">
-        <span className="text-xl leading-none mt-0.5">{KIND_ICON[draft.kind]}</span>
+        <EntryIcon kind={draft.kind} data={d} className="text-cyber-purple shrink-0 mt-0.5" />
         <span className="flex-1 min-w-0">
           <span className="block text-xs font-bold uppercase tracking-wider text-cyber-purple">
             {header ?? (
@@ -238,8 +239,8 @@ const ExerciseList: React.FC<{ value: StrengthSet[]; onChange: (v: StrengthSet[]
             <input className={cell} inputMode="numeric" value={x.sets ?? ''} placeholder="S" onChange={(e) => upd(i, { sets: n(e.target.value) })} />
             <input className={cell} inputMode="numeric" value={x.reps ?? ''} placeholder="W" onChange={(e) => upd(i, { reps: n(e.target.value) })} />
             <input className={cell} inputMode="decimal" value={x.weight_kg ?? ''} placeholder="kg" onChange={(e) => upd(i, { weight_kg: n(e.target.value) })} />
-            <button type="button" className="text-slate-500" onClick={() => onChange(value.filter((_, j) => j !== i))}>
-              ✕
+            <button type="button" className="text-slate-500" onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label="Übung entfernen">
+              <Icons.Close size={16} />
             </button>
           </div>
         ))}
