@@ -21,8 +21,24 @@ describe('parseDate', () => {
   it('akzeptiert Offset ohne Doppelpunkt und fehlende Sekunden', () => {
     expect(parseDate('2026-11-01T07:12+0100')?.iso).toBe('2026-11-01T07:12:00+01:00');
   });
-  it('lehnt deutsches Datumsformat ab', () => {
-    expect(parseDate('01.11.2026, 07:12')).toBeUndefined();
+  it('liest das deutsche Format von Kurzbefehle in Berliner Zeit', () => {
+    expect(parseDate('01.11.2026, 07:12')?.iso).toBe('2026-11-01T07:12:00+01:00'); // Winterzeit
+    expect(parseDate('15.07.2026, 07:12:34')?.iso).toBe('2026-07-15T07:12:34+02:00'); // Sommerzeit
+    expect(parseDate('01.11.26, 00:30')?.day).toBe('2026-11-01');
+    expect(parseDate('1. Nov. 2026 um 07:12')?.iso).toBe('2026-11-01T07:12:00+01:00');
+    expect(parseDate('3. November 2026 um 23:05')?.day).toBe('2026-11-03');
+  });
+  it('liest englische Formate mit AM/PM', () => {
+    expect(parseDate('Nov 1, 2026 at 7:12 AM')?.iso).toBe('2026-11-01T07:12:00+01:00');
+    expect(parseDate('11/1/26, 12:30 PM')?.iso).toBe('2026-11-01T12:30:00+01:00');
+    expect(parseDate('11/1/26, 12:30 AM')?.iso).toBe('2026-11-01T00:30:00+01:00');
+  });
+  it('nimmt eine andere Zeitzone, wenn angegeben', () => {
+    expect(parseDate('01.11.2026, 07:12', 'America/New_York')?.iso).toBe('2026-11-01T07:12:00-05:00'); // Sommerzeit dort seit 2 Uhr vorbei
+  });
+  it('lehnt Unsinn ab', () => {
+    expect(parseDate('gestern')).toBeUndefined();
+    expect(parseDate('32.13.2026, 07:12')).toBeUndefined();
   });
 });
 

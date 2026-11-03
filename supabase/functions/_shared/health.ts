@@ -72,17 +72,88 @@ export function parseNumber(s: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** Akzeptiert ISO 8601 ("2026-11-01T07:12:00+01:00"). Gibt lokalen Tag und normierten ISO-String zurück. */
-export function parseDate(s: string): { day: string; iso: string; ms: number } | undefined {
-  const t = s.trim();
+const MONTHS_DE: Record<string, number> = {
+  jan: 1, feb: 2, mär: 3, mar: 3, apr: 4, mai: 5, jun: 6, jul: 7, aug: 8, sep: 9, okt: 10, oct: 10, nov: 11, dez: 12, dec: 12, may: 5,
+};
+
+/** Versatz einer Zeitzone in Minuten zu einem UTC-Zeitpunkt, z. B. 60 für Berlin im Winter. */
+function zoneOffsetMinutes(utcMs: number, tz: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(utcMs));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return Math.round((asUtc - utcMs) / 60000);
+}
+
+/** Lokale Uhrzeit in einer Zeitzone in UTC-Millisekunden und Offset-String umrechnen. */
+function localToUtc(y: number, mo: number, d: number, h: number, mi: number, sec: number, tz: string): { ms: number; offset: string } {
+  const guess = Date.UTC(y, mo - 1, d, h, mi, sec);
+  let off = zoneOffsetMinutes(guess, tz);
+  let ms = guess - off * 60000;
+  const off2 = zoneOffsetMinutes(ms, tz);
+  if (off2 !== off) {
+    off = off2;
+    ms = guess - off * 60000;
+  }
+  const sign = off < 0 ? '-' : '+';
+  const a = Math.abs(off);
+  return { ms, offset: `${sign}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}` };
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+export const DEFAULT_TZ = 'Europe/Berlin';
+
+/**
+ * Akzeptiert ISO 8601 ("2026-11-01T07:12:00+01:00") und die Textform, die Kurzbefehle für Datumswerte ausgibt:
+ * "01.11.2026, 07:12", "01.11.26, 07:12:34", "1. Nov. 2026 um 07:12", "Nov 1, 2026 at 7:12 AM", "11/1/26, 7:12 AM".
+ * Ohne Offset gilt die Zeitzone tz (Standard Europe/Berlin). Gibt lokalen Tag und normierten ISO-String zurück.
+ */
+export function parseDate(s: string, tz = DEFAULT_TZ): { day: string; iso: string; ms: number } | undefined {
+  const t = s.trim().replace(/\u202f|\u00a0/g, ' ');
   const m = t.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(:\d{2})?)(\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/);
-  if (!m) return undefined;
-  const offset = m[5] ? (m[5] === 'Z' ? 'Z' : m[5].includes(':') ? m[5] : `${m[5].slice(0, 3)}:${m[5].slice(3)}`) : 'Z';
-  const time = m[3] ? m[2] : `${m[2]}:00`;
-  const iso = `${m[1]}T${time}${offset}`;
-  const ms = Date.parse(iso);
+  if (m) {
+    const offset = m[5] ? (m[5] === 'Z' ? 'Z' : m[5].includes(':') ? m[5] : `${m[5].slice(0, 3)}:${m[5].slice(3)}`) : 'Z';
+    const time = m[3] ? m[2] : `${m[2]}:00`;
+    const iso = `${m[1]}T${time}${offset}`;
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return undefined;
+    return { day: m[1], iso, ms };
+  }
+  let y: number | undefined, mo: number | undefined, d: number | undefined;
+  let rest = '';
+  let g: RegExpMatchArray | null;
+  if ((g = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4}),?\s+(.*)$/))) {
+    // 01.11.2026, 07:12
+    d = Number(g[1]); mo = Number(g[2]); y = Number(g[3]); rest = g[4];
+  } else if ((g = t.match(/^(\d{1,2})\.\s*([A-Za-zÄäÖöÜü]+)\.?\s+(\d{4}),?\s+(?:um\s+)?(.*)$/))) {
+    // 1. Nov. 2026 um 07:12
+    d = Number(g[1]); mo = MONTHS_DE[g[2].toLowerCase().slice(0, 3)]; y = Number(g[3]); rest = g[4];
+  } else if ((g = t.match(/^([A-Za-z]+)\.?\s+(\d{1,2}),\s+(\d{4}),?\s+(?:at\s+)?(.*)$/))) {
+    // Nov 1, 2026 at 7:12 AM
+    mo = MONTHS_DE[g[1].toLowerCase().slice(0, 3)]; d = Number(g[2]); y = Number(g[3]); rest = g[4];
+  } else if ((g = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(.*)$/))) {
+    // 11/1/26, 7:12 AM
+    mo = Number(g[1]); d = Number(g[2]); y = Number(g[3]); rest = g[4];
+  }
+  if (!y || !mo || !d) return undefined;
+  if (y < 100) y += 2000;
+  const tm = rest.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (!tm) return undefined;
+  let h = Number(tm[1]);
+  const mi = Number(tm[2]);
+  const sec = tm[3] ? Number(tm[3]) : 0;
+  if (tm[4]) {
+    const pm = tm[4].toUpperCase() === 'PM';
+    if (h === 12) h = pm ? 12 : 0;
+    else if (pm) h += 12;
+  }
+  if (mo > 12 || d > 31 || h > 23 || mi > 59) return undefined;
+  const day = `${y}-${pad(mo)}-${pad(d)}`;
+  const { ms, offset } = localToUtc(y, mo, d, h, mi, sec, tz);
   if (!Number.isFinite(ms)) return undefined;
-  return { day: m[1], iso, ms };
+  return { day, iso: `${day}T${pad(h)}:${pad(mi)}:${pad(sec)}${offset}`, ms };
 }
 
 function round(n: number, digits: number) {
@@ -90,7 +161,7 @@ function round(n: number, digits: number) {
   return Math.round(n * f) / f;
 }
 
-function parsePointMetric(metric: PointMetric, block: any, warnings: string[]): HealthRow[] {
+function parsePointMetric(metric: PointMetric, block: any, warnings: string[], tz: string): HealthRow[] {
   const cfg = POINT_METRICS[metric];
   const values = toList(block?.values);
   const dates = toList(block?.dates);
@@ -102,7 +173,7 @@ function parsePointMetric(metric: PointMetric, block: any, warnings: string[]): 
   const byDay = new Map<string, { v: number; iso: string; ms: number }[]>();
   values.forEach((raw, i) => {
     let v = parseNumber(raw);
-    const d = parseDate(dates[i]);
+    const d = parseDate(dates[i], tz);
     if (v === undefined || !d) {
       warnings.push(`${metric}: Zeile ${i + 1} nicht lesbar ("${raw}" / "${dates[i]}").`);
       return;
@@ -176,7 +247,7 @@ export function unionMinutes(intervals: [number, number][]): number {
   return total / 60000;
 }
 
-function parseSleep(block: any, warnings: string[]): HealthRow[] {
+function parseSleep(block: any, warnings: string[], tz: string): HealthRow[] {
   const values = toList(block?.values);
   const starts = toList(block?.starts);
   const ends = toList(block?.ends);
@@ -189,8 +260,8 @@ function parseSleep(block: any, warnings: string[]): HealthRow[] {
   const nights = new Map<string, { stage: Stage; a: number; b: number; endIso: string }[]>();
   values.forEach((label, i) => {
     const stage = sleepStage(label);
-    const s = parseDate(starts[i]);
-    const e = parseDate(ends[i]);
+    const s = parseDate(starts[i], tz);
+    const e = parseDate(ends[i], tz);
     if (!stage || !s || !e) {
       warnings.push(`sleep: Zeile ${i + 1} nicht lesbar ("${label}").`);
       return;
@@ -226,12 +297,12 @@ function parseSleep(block: any, warnings: string[]): HealthRow[] {
  * Schritte: iPhone und Watch zählen parallel. Pro Tag wird je Quelle summiert
  * und die Quelle mit den meisten Schritten genommen. Ohne Quellenangabe wird alles summiert.
  */
-function parseSteps(block: any, warnings: string[]): HealthRow[] {
-  return parseSummed('steps', 'Schritte', block, warnings);
+function parseSteps(block: any, warnings: string[], tz: string): HealthRow[] {
+  return parseSummed('steps', 'Schritte', block, warnings, tz);
 }
 
 /** Tagessumme je Quelle, die größte Quelle zählt (Schritte, aktive Kalorien, Trainingsminuten). */
-function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: string, block: any, warnings: string[]): HealthRow[] {
+function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: string, block: any, warnings: string[], tz: string): HealthRow[] {
   const values = toList(block?.values);
   const dates = toList(block?.dates);
   const sources = toList(block?.sources);
@@ -245,7 +316,7 @@ function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: str
   const perDay = new Map<string, { bySource: Map<string, number>; lastIso: string; lastMs: number }>();
   values.forEach((raw, i) => {
     const v = parseNumber(raw);
-    const d = parseDate(dates[i]);
+    const d = parseDate(dates[i], tz);
     if (v === undefined || !d || v < 0) {
       warnings.push(`${metric}: Zeile ${i + 1} nicht lesbar.`);
       return;
@@ -273,14 +344,24 @@ export function parseHealthPayload(body: any): HealthParseResult {
   if (!metrics || typeof metrics !== 'object') {
     return { rows: [], warnings: ['Kein Feld "metrics" im Paket gefunden.'] };
   }
+  // Optionales Feld tz (IANA), falls das iPhone in einer anderen Zeitzone steht.
+  let tz = DEFAULT_TZ;
+  if (typeof body.tz === 'string' && body.tz.trim()) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: body.tz.trim() });
+      tz = body.tz.trim();
+    } catch {
+      warnings.push(`Zeitzone "${body.tz}" unbekannt, ${DEFAULT_TZ} verwendet.`);
+    }
+  }
   const rows: HealthRow[] = [];
   for (const m of Object.keys(POINT_METRICS) as PointMetric[]) {
-    if (metrics[m]) rows.push(...parsePointMetric(m, metrics[m], warnings));
+    if (metrics[m]) rows.push(...parsePointMetric(m, metrics[m], warnings, tz));
   }
-  if (metrics.sleep) rows.push(...parseSleep(metrics.sleep, warnings));
-  if (metrics.steps) rows.push(...parseSteps(metrics.steps, warnings));
-  if (metrics.active_kcal) rows.push(...parseSummed('active_kcal', 'kcal', metrics.active_kcal, warnings));
-  if (metrics.exercise_min) rows.push(...parseSummed('exercise_min', 'min', metrics.exercise_min, warnings));
+  if (metrics.sleep) rows.push(...parseSleep(metrics.sleep, warnings, tz));
+  if (metrics.steps) rows.push(...parseSteps(metrics.steps, warnings, tz));
+  if (metrics.active_kcal) rows.push(...parseSummed('active_kcal', 'kcal', metrics.active_kcal, warnings, tz));
+  if (metrics.exercise_min) rows.push(...parseSummed('exercise_min', 'min', metrics.exercise_min, warnings, tz));
   for (const k of Object.keys(metrics)) {
     if (!(k in POINT_METRICS) && !['sleep', 'steps', 'active_kcal', 'exercise_min'].includes(k)) warnings.push(`Unbekannte Kennzahl "${k}" ignoriert.`);
   }

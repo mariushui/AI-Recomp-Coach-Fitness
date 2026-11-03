@@ -103,7 +103,8 @@ def setvar(name, src_uuid, src_name):
 def point_block(sample_type, value_var, date_var, limit=10):
     f = find(sample_type, limit)
     v = detail(f, "Value"); setvar(value_var, v, "Wert")
-    d = detail(f, "Start Date"); fd = fmt_date(d, "Startdatum"); setvar(date_var, fd, "Formatiertes Datum")
+    # Kein "Datum formatieren": mit einer Liste von Daten liefert die Aktion nichts. Der Server liest das Datumsformat von Kurzbefehle.
+    d = detail(f, "Start Date"); setvar(date_var, d, "Startdatum")
 
 point_block("Weight", "GW", "GD")
 point_block("Body Fat Percentage", "KW", "KD")
@@ -111,8 +112,8 @@ point_block("Resting Heart Rate", "RW", "RD")
 point_block("Heart Rate Variability", "HW", "HD", limit=40)
 f = find("Sleep", 80)
 v = detail(f, "Value"); setvar("SW", v, "Wert")
-d = detail(f, "Start Date"); fd = fmt_date(d, "Startdatum"); setvar("SS", fd, "Formatiertes Datum")
-d = detail(f, "End Date"); fd = fmt_date(d, "Enddatum"); setvar("SE", fd, "Formatiertes Datum")
+d = detail(f, "Start Date"); setvar("SS", d, "Startdatum")
+d = detail(f, "End Date"); setvar("SE", d, "Enddatum")
 
 def dict_field(key, value):
     return {"WFItemType": 0, "WFKey": plain(key), "WFValue": value}
