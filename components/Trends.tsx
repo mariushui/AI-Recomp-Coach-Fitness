@@ -15,6 +15,7 @@ import {
 import { SPORTS, SPORT_LABEL, type Entry } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { dailyStats, movingAverage, weeklySportMinutes } from '../lib/stats';
+import { matchPlans, weeklyPlanStats } from '../lib/plans';
 import { addDays, startOfDay } from '../lib/time';
 import { Card, ErrorBox } from './ui';
 
@@ -65,6 +66,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries]);
   const weeks = useMemo(() => weeklySportMinutes(entries).map((w) => ({ ...w, label: shortDay(w.week) })), [entries]);
+  const planWeeks = useMemo(
+    () => weeklyPlanStats(matchPlans(entries)).map((w) => ({ ...w, label: shortDay(w.week), open: w.planned - w.done })),
+    [entries],
+  );
   const sportsUsed = SPORTS.filter((s) => weeks.some((w) => w[s]));
   const has = (k: keyof (typeof days)[number]) => days.some((d) => d[k] !== undefined);
 
@@ -136,6 +141,19 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             {sportsUsed.map((s) => (
               <Bar key={s} dataKey={s} name={SPORT_LABEL[s]} stackId="a" fill={SPORT_COLORS[s]} />
             ))}
+          </BarChart>
+        </Chart>
+      )}
+
+      {planWeeks.length > 0 && (
+        <Chart title="Plan erfüllt pro Woche" hint="Geplante Einheiten bis heute. Grün = erledigt, grau = nicht erledigt.">
+          <BarChart data={planWeeks}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            <XAxis dataKey="label" {...axis} />
+            <YAxis {...axis} width={28} allowDecimals={false} />
+            <Tooltip {...tooltipStyle} />
+            <Bar dataKey="done" name="erledigt" stackId="p" fill="#ADFF2F" />
+            <Bar dataKey="open" name="nicht erledigt" stackId="p" fill="#334155" radius={[4, 4, 0, 0]} />
           </BarChart>
         </Chart>
       )}

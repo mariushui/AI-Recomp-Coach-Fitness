@@ -2,7 +2,7 @@
 // Nur reines TypeScript, keine Imports von Deno- oder Browser-APIs.
 // Beschreibung in docs/DATENMODELL.md. Änderungen dort mitpflegen.
 
-export const ENTRY_KINDS = ['meal', 'workout', 'body', 'wellbeing', 'lab', 'note', 'health'] as const;
+export const ENTRY_KINDS = ['meal', 'workout', 'plan', 'body', 'wellbeing', 'lab', 'note', 'health'] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
 export const ENTRY_SOURCES = ['voice', 'text', 'manual', 'health', 'import'] as const;
@@ -57,6 +57,24 @@ export interface WorkoutData {
   avg_hr?: number;
   exercises?: StrengthSet[];
   notes?: string;
+}
+
+/** Vorgenommene Einheit. occurred_at = geplanter Zeitpunkt. */
+export interface PlanData {
+  sport: Sport;
+  sport_label?: string;
+  session_type?: WorkoutData['session_type'];
+  duration_min?: number;
+  rpe?: number; // geplante Intensität 1-10
+  focus?: string; // woran gearbeitet werden soll
+  goal?: string; // messbares Ziel, z. B. "8 km unter 5:45" oder "70 % erste Aufschläge"
+  distance_km?: number;
+  exercises?: StrengthSet[];
+  notes?: string;
+  // erledigt wird aus einem passenden Training am selben Tag abgeleitet.
+  // Gespeichert wird nur, was sich nicht ableiten lässt.
+  status?: 'ausgefallen';
+  skip_reason?: string;
 }
 
 export interface BodyData {
@@ -120,6 +138,7 @@ export interface HealthData {
 export type EntryData =
   | MealData
   | WorkoutData
+  | PlanData
   | BodyData
   | WellbeingData
   | LabData
@@ -129,6 +148,7 @@ export type EntryData =
 export interface EntryDataByKind {
   meal: MealData;
   workout: WorkoutData;
+  plan: PlanData;
   body: BodyData;
   wellbeing: WellbeingData;
   lab: LabData;
@@ -153,6 +173,7 @@ export type NewEntry<K extends EntryKind = EntryKind> = Omit<Entry<K>, 'id' | 'u
 export const KIND_LABEL: Record<EntryKind, string> = {
   meal: 'Mahlzeit',
   workout: 'Training',
+  plan: 'Geplant',
   body: 'Körperwerte',
   wellbeing: 'Befinden',
   lab: 'Laborwert',
@@ -218,22 +239,17 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
       });
       return (d.description || d.items?.length ? d : null) as any;
     }
-    case 'workout': {
+    case 'workout':
+    case 'plan': {
       const sport = (SPORTS as readonly string[]).includes(raw.sport) ? (raw.sport as Sport) : 'sonstiges';
-      const d = clean<WorkoutData>({
+      const common = {
         sport,
         sport_label: str(raw.sport_label),
         session_type: str(raw.session_type) as WorkoutData['session_type'],
         duration_min: num(raw.duration_min),
         rpe: num(raw.rpe),
         focus: str(raw.focus),
-        high: str(raw.high),
-        low: str(raw.low),
-        result: str(raw.result),
-        opponent: str(raw.opponent),
         distance_km: num(raw.distance_km),
-        avg_pace: str(raw.avg_pace),
-        avg_hr: num(raw.avg_hr),
         exercises: Array.isArray(raw.exercises)
           ? raw.exercises
               .filter((e: any) => str(e?.exercise))
@@ -248,8 +264,24 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
               )
           : undefined,
         notes: str(raw.notes),
-      });
-      return d as any;
+      };
+      if (kind === 'plan') {
+        return clean<PlanData>({
+          ...common,
+          goal: str(raw.goal),
+          status: raw.status === 'ausgefallen' ? 'ausgefallen' : undefined,
+          skip_reason: str(raw.skip_reason),
+        }) as any;
+      }
+      return clean<WorkoutData>({
+        ...common,
+        high: str(raw.high),
+        low: str(raw.low),
+        result: str(raw.result),
+        opponent: str(raw.opponent),
+        avg_pace: str(raw.avg_pace),
+        avg_hr: num(raw.avg_hr),
+      }) as any;
     }
     case 'body': {
       const d = clean<BodyData>({

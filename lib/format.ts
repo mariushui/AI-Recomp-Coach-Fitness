@@ -5,6 +5,7 @@ import {
   type EntryKind,
   type MealData,
   type WorkoutData,
+  type PlanData,
   type BodyData,
   type WellbeingData,
   type LabData,
@@ -15,6 +16,7 @@ import {
 export const KIND_ICON: Record<EntryKind, string> = {
   meal: '🍳',
   workout: '🎾',
+  plan: '🗓️',
   body: '⚖️',
   wellbeing: '🙂',
   lab: '🧪',
@@ -53,6 +55,17 @@ export function summarize(kind: EntryKind, data: any): string {
         w.high && `↑ ${w.high}`,
         w.low && `↓ ${w.low}`,
         w.exercises?.length && `${w.exercises.length} Übungen`,
+      ]);
+    }
+    case 'plan': {
+      const p = data as PlanData;
+      return j([
+        p.sport === 'sonstiges' ? p.sport_label ?? 'Training' : SPORT_LABEL[p.sport],
+        p.duration_min !== undefined && `${p.duration_min} min`,
+        p.distance_km !== undefined && `${p.distance_km} km`,
+        p.focus && `Fokus: ${p.focus}`,
+        p.goal && `Ziel: ${p.goal}`,
+        p.exercises?.length && `${p.exercises.length} Übungen`,
       ]);
     }
     case 'body': {
@@ -95,7 +108,7 @@ export function summarize(kind: EntryKind, data: any): string {
 }
 
 export function entryTitle(e: Pick<Entry, 'kind' | 'data'>): string {
-  if (e.kind === 'workout') {
+  if (e.kind === 'workout' || e.kind === 'plan') {
     const w = e.data as WorkoutData;
     return w.sport === 'sonstiges' ? w.sport_label ?? 'Training' : SPORT_LABEL[w.sport];
   }

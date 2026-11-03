@@ -12,13 +12,14 @@ const DRAFT_KEY = 'recomp_quicklog_text';
 const QUICK_ADD: { kind: EntryKind; label: string; data: any }[] = [
   { kind: 'meal', label: 'Mahlzeit', data: {} },
   { kind: 'workout', label: 'Training', data: { sport: 'tennis' } },
+  { kind: 'plan', label: 'Plan', data: { sport: 'tennis' } },
   { kind: 'body', label: 'Gewicht', data: {} },
   { kind: 'wellbeing', label: 'Befinden', data: {} },
   { kind: 'lab', label: 'Laborwert', data: {} },
-  { kind: 'note', label: 'Notiz', data: {} },
 ];
 
 const EXAMPLES = [
+  'Plan für die Woche: Dienstag 18 Uhr Tennisstunde, Fokus Rückhand. Donnerstag 8 km locker laufen. Samstag Capoeira',
   'Frühstück: 3 Eier, 80 g Haferflocken mit Heidelbeeren, 30 g Whey',
   'Tennis 90 Minuten Training, Fokus Aufschlag. High: Kick-Aufschlag kam stabil. Low: Rückhand-Slice zu kurz. Belastung 7',
   'Gut geschlafen, Energie hoch, leichter Muskelkater in den Waden, rechter Ellbogen zwickt etwas',

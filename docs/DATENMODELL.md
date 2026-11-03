@@ -25,6 +25,11 @@ Technik-Sport (Tennis, Capoeira): `focus`, `high`, `low`, `result`, `opponent`.
 Ausdauer: `distance_km`, `avg_pace`, `avg_hr`.
 Kraft: `exercises[]` mit `exercise`, `sets`, `reps`, `weight_kg`, `rpe`.
 
+**plan** (vorgenommene Einheit): gleiche Felder wie workout für Sport, Art, Dauer, Intensität (`rpe`), `focus`, `distance_km`, `exercises[]`, `notes`. Dazu `goal` (messbares Ziel), `status` (nur `ausgefallen`), `skip_reason`.
+`occurred_at` ist der geplante Zeitpunkt. Pläne entstehen per Sprache („Donnerstag 18 Uhr Tennis, Fokus Rückhand“) oder von Hand im Kalender.
+„Erledigt“ wird nicht gespeichert, sondern abgeleitet: Ein Training derselben Sportart am selben Tag erfüllt den Plan. Jedes Training erfüllt höchstens einen Plan (`lib/plans.ts`).
+Status im Kalender: geplant (heute oder Zukunft), erledigt, nicht erfasst (Tag vorbei, kein Training), ausgefallen.
+
 **body** (Körperwerte, manuell): `weight_kg`, `body_fat_pct`, `waist_cm`, `bp_systolic`, `bp_diastolic`.
 
 **wellbeing** (Befinden), Skalen 1 bis 5: `energy`, `mood`, `sleep_quality`, `stress`, `soreness`, `joint_pain`, `focus`, `appetite`. Dazu `soreness_areas[]`, `joint_pain_areas[]`, `notes`.
@@ -46,4 +51,4 @@ Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 �
 
 ## Bewusst noch nicht drin
 
-Steps und aktive Kalorien (doppelte Zählung von iPhone und Watch), Workouts aus Health (kommen per Sprache), Recovery-Score (Phase 2).
+Wiederkehrende Pläne (Vorlagen wie „jeden Dienstag Tennis“), Kalender-Abo für iPhone- oder Google-Kalender, Steps und aktive Kalorien (doppelte Zählung von iPhone und Watch), Workouts aus Health (kommen per Sprache), Recovery-Score (Phase 2).

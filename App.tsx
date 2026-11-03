@@ -3,17 +3,17 @@ import type { Session } from '@supabase/supabase-js';
 import { isConfigured, supabase } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
 import QuickLog from './components/QuickLog';
-import DayView from './components/DayView';
+import CalendarView from './components/CalendarView';
 import Settings from './components/Settings';
 import { Card } from './components/ui';
 
 const Trends = lazy(() => import('./components/Trends'));
 
-type Tab = 'log' | 'day' | 'trends' | 'settings';
+type Tab = 'log' | 'calendar' | 'trends' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'log', label: 'Erfassen', icon: '＋' },
-  { id: 'day', label: 'Tag', icon: '☰' },
+  { id: 'calendar', label: 'Kalender', icon: '🗓' },
   { id: 'trends', label: 'Verlauf', icon: '📈' },
   { id: 'settings', label: 'Mehr', icon: '⚙' },
 ];
@@ -61,7 +61,7 @@ function App() {
 
       <main className="max-w-xl mx-auto px-4 pt-4">
         {tab === 'log' && <QuickLog onSaved={bump} />}
-        {tab === 'day' && <DayView refreshKey={refreshKey} />}
+        {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChanged={bump} />}
         {tab === 'trends' && (
           <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
             <Trends refreshKey={refreshKey} />

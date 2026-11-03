@@ -44,7 +44,7 @@ Phase 2 (später): Planung und Coaching auf Basis der gesammelten Daten.
 ## Datenmodell in Kurzform
 
 Eine Tabelle `entries` als Event-Log. Jeder Eintrag hat `kind`, `occurred_at` (ISO mit Offset), `source` und `data` (JSON).
-Arten: `meal`, `workout`, `body`, `wellbeing`, `lab`, `note`, `health`. Details in `docs/DATENMODELL.md`.
+Arten: `meal`, `workout`, `plan`, `body`, `wellbeing`, `lab`, `note`, `health`. Details in `docs/DATENMODELL.md`.
 
 ## Prüfen vor jedem Commit
 

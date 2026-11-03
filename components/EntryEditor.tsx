@@ -93,7 +93,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
             </>
           )}
 
-          {draft.kind === 'workout' && (
+          {(draft.kind === 'workout' || draft.kind === 'plan') && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <SelectField
@@ -119,9 +119,18 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
               {d.sport === 'sonstiges' && <TextField label="Welcher Sport" value={d.sport_label} onChange={(v) => set('sport_label', v)} />}
               <div className="grid grid-cols-2 gap-3">
                 <NumberField label="Dauer" unit="min" value={d.duration_min} onChange={(v) => set('duration_min', v)} />
-                <NumberField label="Belastung RPE" unit="1-10" value={d.rpe} onChange={(v) => set('rpe', v)} />
+                <NumberField label={draft.kind === 'plan' ? 'Intensität' : 'Belastung RPE'} unit="1-10" value={d.rpe} onChange={(v) => set('rpe', v)} />
               </div>
-              {SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'skill' && (
+              {draft.kind === 'plan' && (
+                <>
+                  <TextField label="Fokus / woran arbeiten" value={d.focus} onChange={(v) => set('focus', v)} />
+                  <TextField label="Ziel" value={d.goal} onChange={(v) => set('goal', v)} placeholder="z. B. 8 km unter 5:45 min/km" />
+                  {SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'endurance' && (
+                    <NumberField label="Distanz" unit="km" step={0.1} value={d.distance_km} onChange={(v) => set('distance_km', v)} />
+                  )}
+                </>
+              )}
+              {draft.kind === 'workout' && SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'skill' && (
                 <>
                   <TextField label="Fokus / woran gearbeitet" value={d.focus} onChange={(v) => set('focus', v)} />
                   <TextField label="High des Tages" value={d.high} onChange={(v) => set('high', v)} />
@@ -134,7 +143,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
                   )}
                 </>
               )}
-              {SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'endurance' && (
+              {draft.kind === 'workout' && SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'endurance' && (
                 <div className="grid grid-cols-3 gap-3">
                   <NumberField label="Distanz" unit="km" step={0.1} value={d.distance_km} onChange={(v) => set('distance_km', v)} />
                   <TextField label="Pace" value={d.avg_pace} onChange={(v) => set('avg_pace', v)} placeholder="5:30" />

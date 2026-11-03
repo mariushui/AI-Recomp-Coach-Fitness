@@ -68,6 +68,27 @@ export const RESPONSE_SCHEMA = {
               notes: S(),
             },
           },
+          plan: {
+            type: 'OBJECT',
+            properties: {
+              sport: E(SPORTS),
+              sport_label: S(),
+              session_type: E(['training', 'match', 'stunde', 'frei', 'wettkampf']),
+              duration_min: N(),
+              rpe: N('geplante Intensität 1-10'),
+              focus: S(),
+              goal: S('messbares Ziel der Einheit'),
+              distance_km: N(),
+              exercises: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: { exercise: S(), sets: N(), reps: N(), weight_kg: N() },
+                },
+              },
+              notes: S(),
+            },
+          },
           body: {
             type: 'OBJECT',
             properties: { weight_kg: N(), body_fat_pct: N(), waist_cm: N(), bp_systolic: N(), bp_diastolic: N() },
@@ -108,6 +129,9 @@ Regeln:
 - occurred_at: Leite die Zeit aus dem Text ab ("heute morgen", "gestern Abend", "nach dem Training"). Ohne Angabe die aktuelle Zeit verwenden. Immer mit dem Zeitzonen-Offset aus dem Kontext.
 - Mahlzeiten: Zutaten mit Menge auflisten. Protein, kcal, Kohlenhydrate und Fett realistisch schätzen. Protein ist am wichtigsten. confidence = low, wenn Mengen fehlen.
 - Training: sport aus der Liste wählen, sonst "sonstiges" mit sport_label. Bei Tennis und Capoeira focus, high und low erfassen, wenn genannt. Bei Kraft jede Übung mit Sätzen, Wiederholungen, Gewicht in kg. Bei Laufen Distanz und Pace.
+- Vorhaben sind plan, nicht workout: alles in der Zukunft oder mit "will", "plane", "vorgenommen", "morgen", "nächste Woche", "am Donnerstag".
+  occurred_at ist dann der geplante Zeitpunkt. Ohne Uhrzeit 18:00 Uhr. Wochentage beziehen sich auf die kommende Woche ab heute.
+  Ein Wochenplan ergibt einen plan-Eintrag pro Einheit. goal nur, wenn ein messbares Ziel genannt ist.
 - RPE 1-10. Befinden-Skalen 1-5 (5 = viel davon). Übersetze Wörter: "top" = 5, "gut" = 4, "ok" = 3, "mäßig" = 2, "schlecht" = 1.
 - Erfinde nichts. Fehlende Werte weglassen.
 - questions: höchstens 2 kurze Rückfragen, nur wenn eine wichtige Angabe fehlt (z. B. Dauer eines Trainings, Menge einer Proteinquelle). Sonst leer.
