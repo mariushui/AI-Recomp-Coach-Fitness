@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
@@ -26,6 +26,16 @@ const CHARTS = [
   { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
 ] as const;
 const CHART_KEY = 'recomp_trend_charts_v2';
+const RANGE_KEY = 'recomp_trend_range';
+const loadRange = (): Range => {
+  try {
+    const r = Number(localStorage.getItem(RANGE_KEY));
+    if ((RANGES as readonly number[]).includes(r)) return r as Range;
+  } catch {
+    /* ignorieren */
+  }
+  return 30;
+};
 const loadCharts = (): Set<string> => {
   try {
     const raw = localStorage.getItem(CHART_KEY);
@@ -107,10 +117,28 @@ const useToggleSet = (initial: string[]) => {
   return [on, toggle] as const;
 };
 
-const Chart: React.FC<{ title: string; hint?: string; controls?: React.ReactNode; children: React.ReactElement }> = ({ title, hint, controls, children }) => (
+const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls?: React.ReactNode; children: React.ReactElement }> = ({ title, summary, hint, controls, children }) => {
+  const [open, setOpen] = useState(false);
+  return (
   <Card>
-    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
-    {hint && <p className="text-xs text-slate-500 mt-0.5">{hint}</p>}
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
+        {summary && <p className="text-xs text-slate-500 mt-0.5">{summary}</p>}
+      </div>
+      {hint && (
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-label="Erklärung"
+          aria-expanded={open}
+          className={`shrink-0 h-6 w-6 rounded-full border text-[11px] font-bold ${open ? 'border-cyber-purple text-cyber-purple' : 'border-white/15 text-slate-500'}`}
+        >
+          i
+        </button>
+      )}
+    </div>
+    {hint && open && <p className="text-xs text-slate-400 mt-2 rounded-lg bg-cyber-black/60 px-3 py-2">{hint}</p>}
     {controls && <div className="mt-2">{controls}</div>}
     <div className="h-52 mt-3">
       <ResponsiveContainer width="100%" height="100%">
@@ -118,17 +146,27 @@ const Chart: React.FC<{ title: string; hint?: string; controls?: React.ReactNode
       </ResponsiveContainer>
     </div>
   </Card>
-);
+  );
+};
 
 const has = (rows: Record<string, any>[], k: string) => rows.some((r) => typeof r[k] === 'number' && r[k] !== 0);
 
 const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
-  const [range, setRange] = useState<Range>(30);
+  const [range, setRangeState] = useState<Range>(loadRange);
+  const setRange = (r: Range) => {
+    setRangeState(r);
+    try {
+      localStorage.setItem(RANGE_KEY, String(r));
+    } catch {
+      /* ignorieren */
+    }
+  };
   const [entries, setEntries] = useState<Entry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heightCm, setHeightCm] = useState<number | null>(null);
+  const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null }>({});
   const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'leanMass', 'bmi']);
   const [macroOn, toggleMacro] = useToggleSet(['protein', 'carbs', 'fat']);
   const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
@@ -143,7 +181,12 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const g = granularityFor(range);
 
   useEffect(() => {
-    loadProfile().then((p) => setHeightCm(p.height_cm ?? null)).catch(() => undefined);
+    loadProfile()
+      .then((p) => {
+        setHeightCm(p.height_cm ?? null);
+        setGoals({ protein: p.protein_goal_g, kcal: p.kcal_goal });
+      })
+      .catch(() => undefined);
   }, []);
   useEffect(() => {
     Promise.all([listEntries(from, to), listSlots(), listSlotOverrideIds()])
@@ -239,7 +282,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
           </button>
         ))}
       </div>
-      <p className="text-[11px] text-slate-500 -mt-2">{g === 'day' ? 'Ein Wert pro Tag.' : 'Ein Wert pro Woche (Mittelwert, Training als Summe).'}</p>
+      {g !== 'day' && <p className="text-[11px] text-slate-500 -mt-2">Ein Wert pro Woche: Mittelwert, Training als Summe.</p>}
       {error && <ErrorBox>{error}</ErrorBox>}
 
       {show('body') && has(rows, 'weight') && (
@@ -277,13 +320,15 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       )}
 
       {show('nutrition') && MACROS.some((m) => has(rows, m.key)) && (
-        <Chart title="Ernährung" hint={`Ø pro Tag: ${avgText(MACROS)}`} controls={<Chips items={MACROS} on={macroOn} toggle={toggleMacro} />}>
+        <Chart title="Ernährung" summary={`Ø pro Tag: ${avgText(MACROS)}`} controls={<Chips items={MACROS} on={macroOn} toggle={toggleMacro} />}>
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
             <YAxis yAxisId="g" {...axis} width={36} />
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
+            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
+            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line
                 key={m.key}
@@ -323,7 +368,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       )}
 
       {show('activity') && ACTIVITY.some((a) => has(rows, a.key)) && (
-        <Chart title="Aktivität" hint={`Ø pro Tag: ${avgText([{ key: 'steps', label: 'Schritte' }, { key: 'activeKcal', label: 'Bewegen', unit: 'kcal' }, { key: 'exerciseMin', label: 'Trainieren', unit: 'min' }])}`} controls={<Chips items={ACTIVITY} on={activityOn} toggle={toggleActivity} />}>
+        <Chart title="Aktivität" summary={`Ø pro Tag: ${avgText([{ key: 'steps', label: 'Schritte' }, { key: 'activeKcal', label: 'Bewegen', unit: 'kcal' }, { key: 'exerciseMin', label: 'Trainieren', unit: 'min' }])}`} controls={<Chips items={ACTIVITY} on={activityOn} toggle={toggleActivity} />}>
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -339,7 +384,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       )}
 
       {show('heart') && HEART.some((h) => has(rows, h.key)) && (
-        <Chart title="Herz" hint={`Ø: ${avgText([{ key: 'restingHr', label: 'Ruhepuls', unit: 'bpm' }, { key: 'hrv', label: 'HRV', unit: 'ms' }, { key: 'hrRecovery', label: 'Cardio-Erholung', unit: 'bpm' }])}. Steigende HRV und Erholung, sinkender Ruhepuls = bessere Fitness.`} controls={<Chips items={HEART} on={heartOn} toggle={toggleHeart} />}>
+        <Chart title="Herz" summary={`Ø: ${avgText([{ key: 'restingHr', label: 'Ruhepuls', unit: 'bpm' }, { key: 'hrv', label: 'HRV', unit: 'ms' }, { key: 'hrRecovery', label: 'Cardio-Erholung', unit: 'bpm' }])}`} hint="Steigende HRV und Cardio-Erholung sowie ein sinkender Ruhepuls zeigen bessere Fitness. Cardio-Erholung = Pulsabfall in der ersten Minute nach dem Training." controls={<Chips items={HEART} on={heartOn} toggle={toggleHeart} />}>
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -353,7 +398,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       )}
 
       {show('sleep') && has(rows, 'sleepH') && (
-        <Chart title="Schlaf (h)" hint={`Ø ${average(days, 'sleepH' as any) ?? '–'} h pro Nacht`}>
+        <Chart title="Schlaf (h)" summary={`Ø ${average(days, 'sleepH' as any) ?? '–'} h pro Nacht`}>
           <BarChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}

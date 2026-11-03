@@ -5,10 +5,11 @@ import { deleteEntry, insertEntries, listEntries, updateEntry } from '../lib/ent
 import { dailyStats } from '../lib/stats';
 import { matchPlans, workoutFromPlan, type PlanState, type PlanStatus } from '../lib/plans';
 import { addDays, dayKey, formatTime, localIso, startOfDay } from '../lib/time';
-import { entryTitle, summarize } from '../lib/format';
+import { entryTitle, healthLine, summarize } from '../lib/format';
 import { EntryIcon, Icons } from './icons';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, fromSlot, isVirtual, visiblePlans } from '../lib/planTemplate';
+import { loadProfile } from '../lib/profile';
 import EntryEditor, { type Draft } from './EntryEditor';
 import TrainingPlanView from './TrainingPlanView';
 import { Button, Card, ErrorBox } from './ui';
@@ -33,12 +34,13 @@ const STATUS_LABEL: Record<PlanStatus, { text: string; cls: string }> = {
 
 const weekStart = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 
-const Stat: React.FC<{ label: string; value?: number; unit: string }> = ({ label, value, unit }) => (
+const Stat: React.FC<{ label: string; value?: number; unit: string; goal?: number | null }> = ({ label, value, unit, goal }) => (
   <div className="rounded-xl bg-cyber-black/60 px-3 py-2">
     <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
     <div className="text-lg font-bold text-slate-100">
       {value === undefined ? <span className="text-slate-600">–</span> : value}
       {value !== undefined && <span className="text-xs text-slate-400 ml-1">{unit}</span>}
+      {goal ? <span className="text-xs text-slate-500"> / {goal}</span> : null}
     </div>
   </div>
 );
@@ -81,7 +83,12 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
   const dayStr = dayKey(day);
   const dayPlans = states.filter((s) => dayKey(s.plan.occurred_at) === dayStr);
   const dayEntries = entries.filter((e) => e.kind !== 'plan' && dayKey(e.occurred_at) === dayStr);
+  const healthEntries = dayEntries.filter((e): e is Entry<'health'> => e.kind === 'health');
   const stats = dailyStats(entries, day, addDays(day, 1))[0];
+  const [proteinGoal, setProteinGoal] = useState<number | null>(null);
+  useEffect(() => {
+    loadProfile().then((p) => setProteinGoal(p.protein_goal_g ?? null)).catch(() => undefined);
+  }, [refreshKey]);
   const isFuture = day > today;
   const isToday = day.getTime() === today.getTime();
 
@@ -291,7 +298,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
       {!isFuture && (
         <div className="grid grid-cols-3 gap-2">
           <Stat label="Gewicht" value={stats?.weight} unit="kg" />
-          <Stat label="Protein" value={stats?.protein} unit="g" />
+          <Stat label="Protein" value={stats?.protein} unit="g" goal={proteinGoal} />
           <Stat label="Training" value={stats?.trainingMin} unit="min" />
         </div>
       )}
@@ -356,23 +363,35 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Erfasst</p>
           {loading && <p className="text-sm text-slate-500">Lade …</p>}
           {!loading && dayEntries.length === 0 && <p className="text-sm text-slate-500">Noch keine Einträge.</p>}
-          {dayEntries.map((e) =>
-            editId === e.id ? (
-              <div key={e.id}>{editorBlock}</div>
-            ) : (
-              <button key={e.id} onClick={() => startEdit(e)} className="w-full text-left">
-                <Card className="flex gap-3 items-start">
-                  <EntryIcon kind={e.kind} data={e.data} className="text-cyber-purple shrink-0 mt-0.5" />
-                  <span className="flex-1 min-w-0">
-                    <span className="flex justify-between text-xs">
-                      <span className="font-bold text-cyber-purple uppercase tracking-wider">{entryTitle(e)}</span>
-                      <span className="text-slate-500">{formatTime(e.occurred_at)}</span>
+          {dayEntries
+            .filter((e) => e.kind !== 'health')
+            .map((e) =>
+              editId === e.id ? (
+                <div key={e.id}>{editorBlock}</div>
+              ) : (
+                <button key={e.id} onClick={() => startEdit(e)} className="w-full text-left">
+                  <Card className="flex gap-3 items-start">
+                    <EntryIcon kind={e.kind} data={e.data} className="text-cyber-purple shrink-0 mt-0.5" />
+                    <span className="flex-1 min-w-0">
+                      <span className="flex justify-between text-xs">
+                        <span className="font-bold text-cyber-purple uppercase tracking-wider">{entryTitle(e)}</span>
+                        <span className="text-slate-500">{formatTime(e.occurred_at)}</span>
+                      </span>
+                      <span className="block text-sm text-slate-200 mt-0.5 break-words">{summarize(e.kind, e.data)}</span>
                     </span>
-                    <span className="block text-sm text-slate-200 mt-0.5 break-words">{summarize(e.kind, e.data)}</span>
-                  </span>
-                </Card>
-              </button>
-            ),
+                    <Icons.Right size={16} className="text-slate-600 shrink-0 mt-1" />
+                  </Card>
+                </button>
+              ),
+            )}
+          {healthEntries.length > 0 && (
+            <Card className="flex gap-3 items-start">
+              <EntryIcon kind="health" className="text-cyber-purple shrink-0 mt-0.5" />
+              <span className="flex-1 min-w-0">
+                <span className="text-xs font-bold text-cyber-purple uppercase tracking-wider">Apple Health</span>
+                <span className="block text-sm text-slate-200 mt-0.5 break-words">{healthLine(healthEntries)}</span>
+              </span>
+            </Card>
           )}
         </div>
       )}

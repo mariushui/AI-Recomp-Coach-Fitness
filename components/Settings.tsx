@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
-import { loadProfile, saveProfile } from '../lib/profile';
+import { loadProfile, saveProfile, suggestedProteinGoal } from '../lib/profile';
+import { listEntries } from '../lib/entries';
+import { dailyStats } from '../lib/stats';
+import { addDays } from '../lib/time';
 import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
 import { Button, Card, ErrorBox, NumberField, TextField } from './ui';
@@ -19,6 +22,9 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ session, onDataChanged }) => {
   const [name, setName] = useState<string | undefined>();
   const [height, setHeight] = useState<number | undefined>();
+  const [proteinGoal, setProteinGoal] = useState<number | undefined>();
+  const [kcalGoal, setKcalGoal] = useState<number | undefined>();
+  const [lastWeight, setLastWeight] = useState<number | undefined>();
   const [token, setToken] = useState<string | null>(null);
   const [lastUsed, setLastUsed] = useState<string | null | undefined>();
   const [legacyJson, setLegacyJson] = useState<string | undefined>();
@@ -31,6 +37,15 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       .then((p) => {
         setName(p.display_name ?? undefined);
         setHeight(p.height_cm ?? undefined);
+        setProteinGoal(p.protein_goal_g ?? undefined);
+        setKcalGoal(p.kcal_goal ?? undefined);
+      })
+      .catch(() => undefined);
+    const now = new Date();
+    listEntries(addDays(now, -30), addDays(now, 1))
+      .then((list) => {
+        const w = dailyStats(list, addDays(now, -30), addDays(now, 1)).map((d) => d.weight).filter((x): x is number => typeof x === 'number');
+        setLastWeight(w.length ? w[w.length - 1] : undefined);
       })
       .catch(() => undefined);
     supabase
@@ -69,7 +84,13 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
 
   const saveName = () =>
     run(async () => {
-      await saveProfile(session.user.id, { display_name: name ?? null, height_cm: height ?? null });
+      await saveProfile(session.user.id, {
+        display_name: name ?? null,
+        height_cm: height ?? null,
+        protein_goal_g: proteinGoal ?? null,
+        kcal_goal: kcalGoal ?? null,
+      });
+      onDataChanged();
       setMsg('Profil gespeichert.');
     });
 
@@ -141,12 +162,28 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         </Button>
       </Section>
 
+      <Section title="Tagesziele">
+        <p className="text-sm text-slate-400">Erscheinen im Verlauf als Linie und auf der Startseite als Fortschritt. Leer lassen, wenn du kein Ziel willst.</p>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
+          <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />
+        </div>
+        {suggestedProteinGoal(lastWeight) !== undefined && proteinGoal !== suggestedProteinGoal(lastWeight) && (
+          <button type="button" className="text-xs text-cyber-purple underline" onClick={() => setProteinGoal(suggestedProteinGoal(lastWeight))}>
+            Vorschlag für Recomposition: {suggestedProteinGoal(lastWeight)} g (2 g pro kg bei {lastWeight} kg)
+          </button>
+        )}
+        <Button variant="ghost" onClick={saveName}>
+          Speichern
+        </Button>
+      </Section>
+
       <Section title="Apple Health">
         <p className="text-sm text-slate-300">
           Ein iOS-Kurzbefehl schickt Gewicht, Körperfett, Schlaf, HRV, Ruhepuls, VO2max, Blutsauerstoff und Schritte an die App. Er sendet immer die letzten 3 Tage. Fällt ein Lauf aus, holt der nächste die Werte nach.
         </p>
         <p className="text-sm text-slate-300">
-          Zurück nach Apple Health gehen Kalorien, Protein, Kohlenhydrate und Fett deiner Mahlzeiten sowie Blutzucker-Laborwerte. Jeder Wert nur einmal.
+          Zurück nach Apple Health gehen Kalorien, Protein, Kohlenhydrate und Fett deiner Mahlzeiten sowie Blutzucker aus den Blutwerten. Jeder Wert nur einmal.
         </p>
         <p className="text-sm text-slate-400">
           Status:{' '}

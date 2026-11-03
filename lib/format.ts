@@ -117,3 +117,33 @@ export function entryTitle(e: Pick<Entry, 'kind' | 'data'>): string {
   }
   return KIND_LABEL[e.kind];
 }
+
+const HEALTH_ORDER = ['sleep', 'hrv', 'resting_hr', 'hr_recovery', 'spo2', 'vo2max', 'steps', 'active_kcal', 'exercise_min', 'weight', 'body_fat', 'workout'];
+
+/** Alle Apple-Health-Werte eines Tages in einer Zeile: "Schlaf 7 h 32 · HRV 58 ms · Ruhepuls 51 · 9.400 Schritte" */
+export function healthLine(entries: Pick<Entry<'health'>, 'data'>[]): string {
+  const byMetric = new Map<string, HealthData>();
+  for (const e of entries) byMetric.set(e.data.metric, e.data);
+  const parts: string[] = [];
+  for (const m of HEALTH_ORDER) {
+    const h = byMetric.get(m);
+    if (!h) continue;
+    switch (m) {
+      case 'sleep':
+        parts.push(`Schlaf ${Math.floor(h.value / 60)} h ${String(h.value % 60).padStart(2, '0')}`);
+        break;
+      case 'steps':
+        parts.push(`${h.value.toLocaleString('de-DE')} Schritte`);
+        break;
+      case 'active_kcal':
+        parts.push(`${h.value} kcal aktiv`);
+        break;
+      case 'exercise_min':
+        parts.push(`${h.value} min Training`);
+        break;
+      default:
+        parts.push(`${HEALTH_LABEL[m] ?? m} ${h.value}${h.unit === '%' ? ' %' : h.unit && m !== 'resting_hr' && m !== 'hr_recovery' ? ' ' + h.unit : ''}`);
+    }
+  }
+  return parts.join(' · ');
+}

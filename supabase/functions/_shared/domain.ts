@@ -194,7 +194,7 @@ export const KIND_LABEL: Record<EntryKind, string> = {
   plan: 'Geplant',
   body: 'Körperwerte',
   wellbeing: 'Befinden',
-  lab: 'Laborwert',
+  lab: 'Blutwert',
   note: 'Notiz',
   health: 'Apple Health',
 };

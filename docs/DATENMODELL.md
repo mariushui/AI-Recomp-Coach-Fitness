@@ -44,7 +44,7 @@ Wird eine Einheit nur für eine Woche geändert, gestrichen (`status: entfernt`)
 **wellbeing** (Befinden), Skalen 1 bis 5: `energy`, `mood`, `sleep_quality`, `stress`, `soreness`, `joint_pain`, `focus`, `appetite`. Dazu `soreness_areas[]`, `joint_pain_areas[]`, `notes`.
 Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 „gut“.
 
-**lab** (Laborwert): `name`, `value`, `unit`. Ein Eintrag pro Wert.
+**lab** (Blutwert, in der Oberfläche „Blutwerte“): `name`, `value`, `unit`. Ein Eintrag pro Wert.
 
 **note**: `text`, `tags[]`.
 

@@ -10,6 +10,7 @@ import { EntryIcon, Icons } from './icons';
 import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
 import { Button, Card, ErrorBox } from './ui';
+import TodayBar from './TodayBar';
 
 const DRAFT_KEY = 'recomp_quicklog_text';
 
@@ -19,7 +20,7 @@ const QUICK_ADD: { kind: EntryKind; label: string; data: any }[] = [
   { kind: 'plan', label: 'Plan', data: { sport: 'tennis' } },
   { kind: 'body', label: 'Gewicht', data: {} },
   { kind: 'wellbeing', label: 'Befinden', data: {} },
-  { kind: 'lab', label: 'Laborwert', data: {} },
+  { kind: 'lab', label: 'Blutwerte', data: {} },
 ];
 
 const EXAMPLES = [
@@ -56,7 +57,7 @@ function useSpeech(onText: (t: string) => void) {
   return { supported: Boolean(SR), listening, start, stop };
 }
 
-const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
+const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSaved, refreshKey = 0 }) => {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY) ?? '';
@@ -181,6 +182,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
 
   return (
     <div className="space-y-4">
+      <TodayBar refreshKey={refreshKey} />
       <Card>
         <div className="relative">
           <textarea

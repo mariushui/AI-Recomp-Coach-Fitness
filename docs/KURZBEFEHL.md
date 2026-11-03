@@ -120,8 +120,8 @@ Der Server speichert dann nichts. Er zeigt nur, was er erkannt hat, und listet u
 
 ## Rückweg: Ernährung und Blutzucker nach Apple Health
 
-Derselbe Kurzbefehl schreibt danach deine Mahlzeiten nach Apple Health: Kalorien, Protein, Kohlenhydrate, Fett. Dazu Blutzucker, wenn du ihn als Laborwert mit Einheit mg/dL oder mmol/L erfasst hast.
-Andere Laborwerte (HbA1c, LDL, Vitamin D) und Trainings werden nicht übertragen. Apple Health hat dafür keinen passenden Messwert, Trainings zeichnet die Watch auf.
+Derselbe Kurzbefehl schreibt danach deine Mahlzeiten nach Apple Health: Kalorien, Protein, Kohlenhydrate, Fett. Dazu Blutzucker, wenn du ihn als Blutwert mit Einheit mg/dL oder mmol/L erfasst hast.
+Andere Blutwerte (HbA1c, LDL, Vitamin D) und Trainings werden nicht übertragen. Apple Health hat dafür keinen passenden Messwert, Trainings zeichnet die Watch auf.
 
 Stand: Server getestet, Kurzbefehl am iPhone noch nicht durchgeklickt.
 
