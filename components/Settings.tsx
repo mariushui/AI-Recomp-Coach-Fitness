@@ -9,6 +9,7 @@ import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
 import { Button, Card, ErrorBox, Label, NumberField, TextField } from './ui';
 
+const inputCls = 'w-full rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-base text-slate-100 focus:outline-none focus:border-cyber-purple';
 const GUIDE_URL = 'https://github.com/mariushui/AI-Recomp-Coach-Fitness/blob/main/docs/KURZBEFEHL.md';
 export const SHORTCUT_NAME = 'Recomp Health';
 
@@ -30,6 +31,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [muscle, setMuscle] = useState<number | undefined>(); // Muskelmasse laut Waage
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
   const [birthDate, setBirthDate] = useState<string | undefined>();
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [lastUsed, setLastUsed] = useState<string | null | undefined>();
   const [legacyJson, setLegacyJson] = useState<string | undefined>();
@@ -123,6 +126,22 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       setMsg('Profil gespeichert.');
     });
 
+  const savePassword = () =>
+    run(async () => {
+      if (pw1.length < 8) throw new Error('Mindestens 8 Zeichen.');
+      if (pw1 !== pw2) throw new Error('Die beiden Passwörter sind nicht gleich.');
+      const { error } = await supabase.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      try {
+        localStorage.setItem('recomp_login_mode', 'password');
+      } catch {
+        /* egal */
+      }
+      setPw1('');
+      setPw2('');
+      setMsg('Passwort gespeichert. Beim nächsten Anmelden E-Mail und Passwort eingeben.');
+    });
+
   const createToken = () =>
     run(async () => {
       if (lastUsed !== undefined && !confirm('Neuer Token macht den alten ungültig. Den Kurzbefehl musst du dann anpassen. Weiter?')) return;
@@ -203,8 +222,25 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         </Button>
       </Section>
 
+      <Section title="Anmeldung">
+        <p className="text-sm text-slate-400">Mit Passwort geht das Anmelden ohne Mail. Die App bleibt angemeldet, bis du dich abmeldest.</p>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <Label>Neues Passwort</Label>
+            <input type="password" autoComplete="new-password" className={inputCls} value={pw1} onChange={(e) => setPw1(e.target.value)} />
+          </label>
+          <label className="block">
+            <Label>Wiederholen</Label>
+            <input type="password" autoComplete="new-password" className={inputCls} value={pw2} onChange={(e) => setPw2(e.target.value)} />
+          </label>
+        </div>
+        <Button variant="ghost" onClick={savePassword} disabled={pw1.length < 8}>
+          Passwort speichern
+        </Button>
+      </Section>
+
       <Section title="Tagesziele">
-        <p className="text-sm text-slate-400">Erscheinen im Verlauf als Linie und auf der Startseite als Fortschritt. Leer lassen, wenn du kein Ziel willst.</p>
+        <p className="text-sm text-slate-400">Erscheinen im Verlauf als Linie und auf der Startseite als Fortschritt. Leer lassen, wenn du kein Ziel willst. Kalorien: Sind Gewicht und Körperfett bekannt, rechnet die Startseite das Tagesziel täglich neu aus Grundumsatz plus aktiven Kalorien. Der Wert hier gilt dann nur für den Verlauf.</p>
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
           <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />

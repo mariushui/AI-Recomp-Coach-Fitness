@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ageFrom, proteinBasis, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal } from '../lib/profile';
+import { ageFrom, dailyKcalTarget, proteinBasis, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal } from '../lib/profile';
 
 describe('Ziel-Vorschläge', () => {
   it('nimmt die Waagen-Muskelmasse, wenn sie zur fettfreien Masse passt, sonst die fettfreie Masse', () => {
@@ -24,5 +24,12 @@ describe('Ziel-Vorschläge', () => {
   it('leitet Fett und Kohlenhydrate aus Kalorien und Protein ab', () => {
     expect(suggestedMacroGoals(2500, 135)).toEqual({ carbs: 300, fat: 85 }); // 85 x 9 + 135 x 4 + 300 x 4 = 2505
     expect(suggestedMacroGoals(undefined, 135)).toBeUndefined();
+  });
+
+  it('rechnet das Kalorienziel täglich aus Verbrauch, sonst fester Wert', () => {
+    expect(dailyKcalTarget(67.2, 880, 600, 2500)).toEqual({ goal: 2900, dynamic: true }); // heute aktiv 880
+    expect(dailyKcalTarget(67.2, undefined, 600, 2500)).toEqual({ goal: 2600, dynamic: true }); // Schnitt
+    expect(dailyKcalTarget(undefined, 880, 600, 2500)).toEqual({ goal: 2500, dynamic: false });
+    expect(dailyKcalTarget(undefined, undefined, undefined, null)).toEqual({ goal: undefined, dynamic: false });
   });
 });

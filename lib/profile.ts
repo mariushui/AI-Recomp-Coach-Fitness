@@ -68,6 +68,22 @@ export function suggestedMacroGoals(kcalGoal: number | undefined, proteinGoal: n
   return { carbs, fat };
 }
 
+/**
+ * Kalorienziel für einen Tag: Grundumsatz (Katch-McArdle aus der fettfreien Masse) plus 10 % Verdauung
+ * plus die aktiven Kalorien dieses Tages aus Apple Health. Fehlt der Tageswert, zählt der 14-Tage-Schnitt.
+ * Ohne fettfreie Masse bleibt es beim festen Ziel aus den Einstellungen.
+ */
+export function dailyKcalTarget(
+  leanMassKg: number | undefined,
+  activeToday: number | undefined,
+  activeAvg: number | undefined,
+  fixedGoal: number | null | undefined,
+): { goal: number | undefined; dynamic: boolean } {
+  const dyn = suggestedKcalGoal(leanMassKg, activeToday ?? activeAvg);
+  if (dyn !== undefined) return { goal: dyn, dynamic: true };
+  return { goal: fixedGoal ?? undefined, dynamic: false };
+}
+
 /** Alter in Jahren aus dem Geburtsdatum */
 export function ageFrom(birthDate: string | null | undefined, now: Date = new Date()): number | undefined {
   if (!birthDate) return undefined;

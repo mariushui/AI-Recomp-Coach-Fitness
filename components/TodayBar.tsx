@@ -1,7 +1,8 @@
 // Tagesleiste oben auf "Erfassen": Ernährung gegen die Ziele, dazu Schlaf, Training, Erholung und Belastung.
 import React, { useEffect, useState } from 'react';
 import { listEntries } from '../lib/entries';
-import { loadProfile } from '../lib/profile';
+import { dailyKcalTarget, loadProfile } from '../lib/profile';
+import { average } from '../lib/stats';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { goalColor, goalRatio, todaySummary, type TodaySummary } from '../lib/today';
@@ -51,6 +52,7 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [s, setS] = useState<TodaySummary | null>(null);
   const [recovery, setRecovery] = useState<number | undefined>();
   const [strain, setStrain] = useState<number | undefined>();
+  const [kcalDynamic, setKcalDynamic] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -61,8 +63,12 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       .then(([list, slots, overrides, profile]) => {
         if (!alive) return;
         const entries = visiblePlans([...list, ...expandSlots(slots, list, from, to, overrides)]);
-        setS(todaySummary(entries, { protein: profile.protein_goal_g, kcal: profile.kcal_goal, carbs: profile.carbs_goal_g, fat: profile.fat_goal_g }, now));
         const days = dailyStats(entries, from, to);
+        const lean = days.map((d) => d.leanMass).filter((x): x is number => typeof x === 'number');
+        const today = days[days.length - 1];
+        const kcal = dailyKcalTarget(lean[lean.length - 1], today?.activeKcal, average(days.slice(-15, -1), 'activeKcal'), profile.kcal_goal);
+        setKcalDynamic(kcal.dynamic);
+        setS(todaySummary(entries, { protein: profile.protein_goal_g, kcal: kcal.goal, carbs: profile.carbs_goal_g, fat: profile.fat_goal_g }, now));
         const rec = dailyRecovery(days);
         setRecovery(rec[rec.length - 1]);
         setStrain(dailyStrain(entries, days).get(dayKey(now)));
@@ -80,9 +86,10 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     <div className="space-y-2" aria-label="Heute">
       <div className="rounded-xl bg-cyber-gray border border-white/5 px-3 py-2.5 space-y-2">
         <MacroRow label="Protein" value={s.protein} goal={s.proteinGoal} unit="g" mode="more" />
-        <MacroRow label="Kalorien" value={s.kcal} goal={s.kcalGoal} unit="kcal" mode="less" />
         <MacroRow label="Kohlenhydr." value={s.carbs} goal={s.carbsGoal} unit="g" mode="less" />
         <MacroRow label="Fett" value={s.fat} goal={s.fatGoal} unit="g" mode="less" />
+        <MacroRow label="Kalorien" value={s.kcal} goal={s.kcalGoal} unit="kcal" mode="less" />
+        {kcalDynamic && <p className="text-[10px] text-slate-500 pt-0.5">Kalorienziel = Grundumsatz + aktive Kalorien heute aus Apple Health</p>}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Tile label="Schlaf letzte Nacht" value={s.sleepH} unit="h" />
