@@ -245,7 +245,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       {show('body') && has(rows, 'weight') && (
         <Chart
           title="Gewicht und Körper"
-          hint={`${g === 'day' ? 'Linien = 7-Tage-Schnitt, Punkte = Tageswert. ' : ''}Jede kg-Linie ist für sich skaliert, damit Trends sichtbar werden. Genaue Werte beim Antippen. Linke Achse: Gewicht, rechte Achse: % und BMI.${heightCm ? '' : ' Für den BMI unter Mehr die Körpergröße eintragen.'}`}
+          hint={`${g === 'day' ? 'Linien = 7-Tage-Schnitt, Punkte = Tageswert. ' : ''}Jede kg-Linie ist für sich skaliert, damit Trends sichtbar werden. Genaue Werte beim Antippen. Linke Achse: Gewicht, rechte Achse: % und BMI.${heightCm ? '' : ' Für den BMI unter Einstellungen die Körpergröße eintragen.'}`}
           controls={<Chips items={BODY} on={bodyOn} toggle={toggleBody} />}
         >
           <ComposedChart data={rows}>
