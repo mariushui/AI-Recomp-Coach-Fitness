@@ -122,3 +122,18 @@ describe('Schritte und Blutsauerstoff', () => {
     expect(r.rows[0].data).toEqual({ metric: 'spo2', value: 96, unit: '%' });
   });
 });
+
+describe('Aktivitätsringe', () => {
+  it('aktive Kalorien und Trainingsminuten je größter Quelle', () => {
+    const r = parseHealthPayload({
+      metrics: {
+        active_kcal: { values: '200\n150\n300', dates: '2026-11-01T08:00:00+01:00\n2026-11-01T12:00:00+01:00\n2026-11-01T09:00:00+01:00', sources: 'Watch\nWatch\niPhone' },
+        exercise_min: { values: '30\n45', dates: '2026-11-01T18:00:00+01:00\n2026-11-02T18:00:00+01:00', sources: 'Watch\nWatch' },
+      },
+    });
+    expect(r.warnings).toEqual([]);
+    const byId = Object.fromEntries(r.rows.map((x) => [x.external_id, x.data]));
+    expect(byId['active_kcal:2026-11-01']).toEqual({ metric: 'active_kcal', value: 350, unit: 'kcal' });
+    expect(byId['exercise_min:2026-11-02']).toEqual({ metric: 'exercise_min', value: 45, unit: 'min' });
+  });
+});
