@@ -25,6 +25,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [proteinGoal, setProteinGoal] = useState<number | undefined>();
   const [kcalGoal, setKcalGoal] = useState<number | undefined>();
   const [leanMass, setLeanMass] = useState<number | undefined>();
+  const [muscle, setMuscle] = useState<number | undefined>(); // Muskelmasse laut Waage
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
   const [birthDate, setBirthDate] = useState<string | undefined>();
   const [token, setToken] = useState<string | null>(null);
@@ -50,6 +51,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         const days = dailyStats(list, addDays(now, -30), addDays(now, 1));
         const lm = days.map((d) => d.leanMass).filter((x): x is number => typeof x === 'number');
         setLeanMass(lm.length ? lm[lm.length - 1] : undefined);
+        const mm = days.map((d) => d.muscle).filter((x): x is number => typeof x === 'number');
+        setMuscle(mm.length ? mm[mm.length - 1] : undefined);
         setActiveKcal(average(days.slice(-14), 'activeKcal'));
       })
       .catch(() => undefined);
@@ -193,16 +196,16 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
           <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
           <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />
         </div>
-        {leanMass === undefined ? (
+        {leanMass === undefined && muscle === undefined ? (
           <p className="text-xs text-slate-500">Vorschläge gibt es, sobald Gewicht und Körperfett erfasst sind (Waage oder Apple Health).</p>
         ) : (
           <div className="space-y-1">
-            {proteinGoal !== suggestedProteinGoal(leanMass) && (
-              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setProteinGoal(suggestedProteinGoal(leanMass))}>
-                Vorschlag Protein: {suggestedProteinGoal(leanMass)} g (2 g je kg fettfreie Masse, {leanMass} kg)
+            {proteinGoal !== suggestedProteinGoal(muscle ?? leanMass) && (
+              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setProteinGoal(suggestedProteinGoal(muscle ?? leanMass))}>
+                Vorschlag Protein: {suggestedProteinGoal(muscle ?? leanMass)} g (2 g je kg {muscle !== undefined ? `Muskelmasse laut Waage, ${muscle} kg` : `fettfreie Masse, ${leanMass} kg`})
               </button>
             )}
-            {kcalGoal !== suggestedKcalGoal(leanMass, activeKcal) && (
+            {leanMass !== undefined && kcalGoal !== suggestedKcalGoal(leanMass, activeKcal) && (
               <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setKcalGoal(suggestedKcalGoal(leanMass, activeKcal))}>
                 Vorschlag Kalorien: {suggestedKcalGoal(leanMass, activeKcal)} kcal (Verbrauch: Grundumsatz{activeKcal ? ` + Ø ${activeKcal} kcal aktiv` : ''})
               </button>

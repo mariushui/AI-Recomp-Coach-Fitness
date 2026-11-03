@@ -171,7 +171,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [heightCm, setHeightCm] = useState<number | null>(null);
   const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null }>({});
-  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'leanMass', 'muscle', 'bmi']);
+  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'muscle', 'bmi']);
   const [macroOn, toggleMacro] = useToggleSet(['protein', 'carbs', 'fat']);
   const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
   const [activityOn, toggleActivity] = useToggleSet(['steps', 'activeKcal', 'exerciseMin']);

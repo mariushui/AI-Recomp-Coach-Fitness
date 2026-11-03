@@ -23,10 +23,14 @@ export async function saveProfile(userId: string, patch: Profile): Promise<void>
   if (error) throw error;
 }
 
-/** Vorschlag fürs Protein-Ziel bei Recomposition: 2 g pro kg fettfreie Masse (Gewicht minus Fett, nicht die Muskelmasse der Waage), auf 5 g gerundet. */
-export function suggestedProteinGoal(leanMassKg: number | undefined): number | undefined {
-  if (!leanMassKg || leanMassKg < 20) return undefined;
-  return Math.round((leanMassKg * 2) / 5) * 5;
+/**
+ * Vorschlag fürs Protein-Ziel bei Recomposition: 2 g pro kg Muskelmasse, auf 5 g gerundet.
+ * Basis ist die Muskelmasse der Waage (zieht nur Fett und Knochen ab, entspricht fast der fettfreien Masse).
+ * Fehlt sie, die gerechnete fettfreie Masse (Gewicht minus Fett).
+ */
+export function suggestedProteinGoal(massKg: number | undefined): number | undefined {
+  if (!massKg || massKg < 20) return undefined;
+  return Math.round((massKg * 2) / 5) * 5;
 }
 
 /**
