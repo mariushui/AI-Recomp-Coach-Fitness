@@ -96,7 +96,7 @@ export interface BodyData {
   weight_kg?: number;
   body_fat_pct?: number;
   waist_cm?: number;
-  muscle_kg?: number; // Muskelmasse laut Waage (Skelettmuskulatur), nicht die fettfreie Masse
+  muscle_kg?: number; // Muskelmasse laut Waage. Je nach Waage fettfreie Masse ohne Knochen oder nur Skelettmuskulatur
   bp_systolic?: number;
   bp_diastolic?: number;
 }
