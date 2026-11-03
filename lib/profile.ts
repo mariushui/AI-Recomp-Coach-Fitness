@@ -34,6 +34,17 @@ export function suggestedProteinGoal(massKg: number | undefined): number | undef
 }
 
 /**
+ * Welche Masse als Protein-Basis gilt. Waagen zeigen "Muskeln" unterschiedlich: Withings und ähnliche als fettfreie Masse
+ * ohne Knochen (etwa 90 % der fettfreien Masse), andere als Skelettmuskulatur (etwa 40 % des Gewichts).
+ * Nur die erste Lesart taugt als Basis. Liegt der Waagenwert unter 75 % der fettfreien Masse, zählt die fettfreie Masse.
+ */
+export function proteinBasis(muscleKg: number | undefined, leanMassKg: number | undefined): { value: number; label: string } | undefined {
+  if (muscleKg && (!leanMassKg || muscleKg >= leanMassKg * 0.75)) return { value: muscleKg, label: 'Muskelmasse laut Waage' };
+  if (leanMassKg) return { value: leanMassKg, label: 'fettfreie Masse' };
+  return undefined;
+}
+
+/**
  * Vorschlag fürs Kalorien-Ziel = geschätzter Verbrauch.
  * Grundumsatz nach Katch-McArdle (370 + 21,6 x fettfreie Masse), plus 10 % Verdauung, plus aktive Kalorien aus Apple Health.
  * Auf 50 kcal gerundet. Ohne fettfreie Masse kein Vorschlag.

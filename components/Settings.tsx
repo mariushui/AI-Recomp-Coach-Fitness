@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
-import { ageFrom, loadProfile, saveProfile, suggestedKcalGoal, suggestedProteinGoal } from '../lib/profile';
+import { ageFrom, loadProfile, proteinBasis, saveProfile, suggestedKcalGoal, suggestedProteinGoal } from '../lib/profile';
 import { listEntries } from '../lib/entries';
 import { average, dailyStats } from '../lib/stats';
 import { addDays } from '../lib/time';
@@ -97,7 +97,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       if (p !== null && (p < 30 || p > 400)) throw new Error('Protein-Ziel bitte zwischen 30 und 400 g.');
       if (k !== null && (k < 800 || k > 6000)) throw new Error('Kalorien-Ziel bitte zwischen 800 und 6.000 kcal.');
       if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
-      if (birthDate && ageFrom(birthDate) === undefined) throw new Error('Geburtsdatum bitte prüfen.');
+      if (birthDate && (birthDate < '1900-01-01' || ageFrom(birthDate) === undefined || ageFrom(birthDate)! > 120)) throw new Error('Geburtsdatum bitte prüfen.');
       await saveProfile(session.user.id, {
         display_name: name ?? null,
         height_cm: height ?? null,
@@ -179,6 +179,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
             type="date"
             className="w-full rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-base text-slate-100"
             value={birthDate ?? ''}
+            min="1900-01-01"
             max={new Date().toISOString().slice(0, 10)}
             onChange={(e) => setBirthDate(e.target.value || undefined)}
           />
@@ -200,9 +201,9 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
           <p className="text-xs text-slate-500">Vorschläge gibt es, sobald Gewicht und Körperfett erfasst sind (Waage oder Apple Health).</p>
         ) : (
           <div className="space-y-1">
-            {proteinGoal !== suggestedProteinGoal(muscle ?? leanMass) && (
-              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setProteinGoal(suggestedProteinGoal(muscle ?? leanMass))}>
-                Vorschlag Protein: {suggestedProteinGoal(muscle ?? leanMass)} g (2 g je kg {muscle !== undefined ? `Muskelmasse laut Waage, ${muscle} kg` : `fettfreie Masse, ${leanMass} kg`})
+            {proteinBasis(muscle, leanMass) && proteinGoal !== suggestedProteinGoal(proteinBasis(muscle, leanMass)!.value) && (
+              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setProteinGoal(suggestedProteinGoal(proteinBasis(muscle, leanMass)!.value))}>
+                Vorschlag Protein: {suggestedProteinGoal(proteinBasis(muscle, leanMass)!.value)} g (2 g je kg {proteinBasis(muscle, leanMass)!.label}, {proteinBasis(muscle, leanMass)!.value} kg)
               </button>
             )}
             {leanMass !== undefined && kcalGoal !== suggestedKcalGoal(leanMass, activeKcal) && (
