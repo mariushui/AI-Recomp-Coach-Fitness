@@ -1,11 +1,13 @@
 // POST /functions/v1/parse-log
-// Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone }
+// Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone, image?: { mime, data (Base64) } }
+// Mit image wertet die KI ein Essensfoto aus. Das Foto wird nicht gespeichert.
 // Antwort: { entries: ParsedEntry[], questions: string[] }
 // Speichert nichts. Die App zeigt das Ergebnis zur Bestätigung und speichert dann selbst.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/http.ts';
 import { RESPONSE_SCHEMA, buildSystemPrompt, buildUserPrompt, normalizeParseResult } from '../_shared/parse.ts';
+import { checkImage, type ImageInput } from '../_shared/image.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
 const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
@@ -24,14 +26,20 @@ Deno.serve(async (req) => {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) return json({ error: 'Nicht angemeldet' }, 401);
 
-  let body: { text?: string; now?: string; tz?: string };
+  let body: { text?: string; now?: string; tz?: string; image?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ error: 'Ungültiges JSON' }, 400);
   }
   const text = (body.text ?? '').trim();
-  if (!text) return json({ error: 'Kein Text' }, 400);
+  let image: ImageInput | null = null;
+  if (body.image != null) {
+    const check = checkImage(body.image);
+    if (!check.ok) return json({ error: check.error }, 400);
+    image = check.image;
+  }
+  if (!text && !image) return json({ error: 'Kein Text und kein Foto' }, 400);
   if (text.length > MAX_CHARS) return json({ error: `Text zu lang (max. ${MAX_CHARS} Zeichen)` }, 400);
   const now = body.now ?? new Date().toISOString();
   const tz = body.tz ?? 'Europe/Berlin';
@@ -47,7 +55,15 @@ Deno.serve(async (req) => {
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
-        contents: [{ role: 'user', parts: [{ text: buildUserPrompt(text, now, tz) }] }],
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              ...(image ? [{ inlineData: { mimeType: image.mime, data: image.data } }] : []),
+              { text: buildUserPrompt(text, now, tz, image !== null) },
+            ],
+          },
+        ],
         generationConfig: {
           temperature: 0.2,
           responseMimeType: 'application/json',

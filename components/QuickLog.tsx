@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { EntryKind, NewEntry } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
 import { insertEntries, parseText } from '../lib/entries';
+import { prepareImage, type PreparedImage } from '../lib/image';
 import { insertSlots } from '../lib/planSlotsApi';
 import { slotsFromDrafts } from '../lib/planTemplate';
 import type { PlanData } from '../supabase/functions/_shared/domain';
@@ -67,8 +68,12 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   const [questions, setQuestions] = useState<string[]>([]);
   const [rawText, setRawText] = useState<string | null>(null);
   const [usedVoice, setUsedVoice] = useState(false);
+  const [photo, setPhoto] = useState<PreparedImage | null>(null);
+  const [usedPhoto, setUsedPhoto] = useState(false);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
   const [asTemplate, setAsTemplate] = useState(false);
-  const [busy, setBusy] = useState<'parse' | 'save' | null>(null);
+  const [busy, setBusy] = useState<'parse' | 'save' | 'photo' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -85,18 +90,38 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     setText((prev) => (prev ? `${prev} ${t}` : t));
   });
 
+  const pickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // dasselbe Foto erneut wählbar
+    if (!file) return;
+    setError(null);
+    setSaved(null);
+    setBusy('photo');
+    try {
+      setPhoto(await prepareImage(file));
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const analyse = async () => {
     setError(null);
     setSaved(null);
     setBusy('parse');
     try {
-      const r = await parseText(text);
+      const r = await parseText(text, photo?.image);
       if (r.entries.length === 0) {
-        setError('Nichts erkannt. Du kannst den Text als Notiz speichern.');
+        setError(photo ? 'Kein Essen erkannt. Schreib dazu, was auf dem Teller ist.' : 'Nichts erkannt. Du kannst den Text als Notiz speichern.');
       }
       setDrafts((prev) => [...prev, ...r.entries.map((e) => ({ ...e }))]);
       setQuestions(r.questions);
       setRawText(text);
+      if (photo && r.entries.length > 0) {
+        setUsedPhoto(true);
+        setPhoto(null);
+      }
       if (/(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(text)) setAsTemplate(true);
     } catch (e: any) {
       setError(`KI nicht erreichbar: ${e.message}. Der Text bleibt erhalten, du kannst ihn als Notiz speichern.`);
@@ -128,8 +153,8 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
           kind: d.kind,
           occurred_at: d.occurred_at,
           data,
-          source: d.manual || !rawText ? 'manual' : usedVoice ? 'voice' : 'text',
-          raw_text: d.manual ? null : rawText,
+          source: d.manual || (rawText === null && !usedPhoto) ? 'manual' : usedPhoto ? 'photo' : usedVoice ? 'voice' : 'text',
+          raw_text: d.manual || !rawText ? null : rawText,
         });
       }
       if (rows.length === 0 && templatePlans.length === 0) {
@@ -152,6 +177,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
       setText('');
       setRawText(null);
       setUsedVoice(false);
+      setUsedPhoto(false);
       onSaved();
     } catch (e: any) {
       setError(`Speichern fehlgeschlagen: ${e.message}`);
@@ -183,12 +209,36 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
             </button>
           )}
         </div>
+        {photo && (
+          <div className="relative mt-3 inline-block">
+            <img src={photo.previewUrl} alt="Essensfoto" className="h-28 rounded-xl border border-white/10 object-cover" />
+            <button
+              type="button"
+              onClick={() => setPhoto(null)}
+              aria-label="Foto entfernen"
+              className="absolute -right-2 -top-2 h-8 w-8 rounded-full bg-cyber-black border border-white/20 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pickPhoto} />
+        <input ref={libraryRef} type="file" accept="image/*" className="hidden" onChange={pickPhoto} />
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <Button variant="ghost" onClick={() => cameraRef.current?.click()} disabled={busy !== null}>
+            📷 Foto machen
+          </Button>
+          <Button variant="ghost" onClick={() => libraryRef.current?.click()} disabled={busy !== null}>
+            🖼 Aus Mediathek
+          </Button>
+        </div>
+        {photo && <p className="text-xs text-slate-500 mt-2">Optional dazuschreiben, was die KI nicht sehen kann, z. B. „250 g Reis, mit Olivenöl“.</p>}
         {!speech.supported && (
           <p className="text-xs text-slate-500 mt-2">Tipp: Auf dem iPhone die Mikrofon-Taste der Tastatur zum Diktieren nutzen.</p>
         )}
         <div className="flex gap-2 mt-3">
-          <Button className="flex-1" onClick={analyse} disabled={!text.trim() || busy !== null}>
-            {busy === 'parse' ? 'Erkenne …' : 'Erkennen'}
+          <Button className="flex-1" onClick={analyse} disabled={(!text.trim() && !photo) || busy !== null}>
+            {busy === 'parse' ? 'Erkenne …' : busy === 'photo' ? 'Lade Foto …' : photo ? 'Foto auswerten' : 'Erkennen'}
           </Button>
           {text.trim() && (
             <Button variant="ghost" onClick={saveAsNote} disabled={busy !== null}>
