@@ -4,7 +4,7 @@ import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functio
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
 import { matchPlans } from '../lib/plans';
-import { listSlots } from '../lib/planSlotsApi';
+import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
 import { addDays, dayKey, startOfDay } from '../lib/time';
@@ -146,8 +146,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     loadProfile().then((p) => setHeightCm(p.height_cm ?? null)).catch(() => undefined);
   }, []);
   useEffect(() => {
-    Promise.all([listEntries(from, to), listSlots()])
-      .then(([list, slots]) => setEntries(visiblePlans([...list, ...expandSlots(slots, list, from, to)])))
+    Promise.all([listEntries(from, to), listSlots(), listSlotOverrideIds()])
+      .then(([list, slots, overrides]) => setEntries(visiblePlans([...list, ...expandSlots(slots, list, from, to, overrides)])))
       .catch((e) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, refreshKey]);

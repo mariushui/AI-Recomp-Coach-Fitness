@@ -13,11 +13,11 @@ export const isoWeekday = (d: Date) => ((d.getDay() + 6) % 7) + 1;
 
 /**
  * Erzeugt für [from, to) je Tag und passender Einheit einen virtuellen plan-Eintrag.
- * Existiert schon ein Eintrag mit derselben external_id (in dieser Woche geändert oder gestrichen),
- * gewinnt dieser und es entsteht kein virtueller Eintrag.
+ * Existiert schon ein Eintrag mit derselben external_id (geändert, verschoben oder gestrichen),
+ * gewinnt dieser und es entsteht kein virtueller Eintrag. overrideIds: external_ids außerhalb von [from, to).
  */
-export function expandSlots(slots: PlanSlot[], existing: Entry[], from: Date, to: Date): Entry<'plan'>[] {
-  const taken = new Set(existing.map((e) => e.external_id).filter(Boolean));
+export function expandSlots(slots: PlanSlot[], existing: Entry[], from: Date, to: Date, overrideIds: string[] = []): Entry<'plan'>[] {
+  const taken = new Set([...existing.map((e) => e.external_id).filter(Boolean), ...overrideIds]);
   const out: Entry<'plan'>[] = [];
   for (let d = startOfDay(from); d < to; d = addDays(d, 1)) {
     const day = dayKey(d);

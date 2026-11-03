@@ -66,4 +66,12 @@ describe('activeSlots', () => {
     );
     expect(r.map((s) => s.id)).toEqual(['z', 'y', 'x']);
   });
+
+  it('unterdrückt die Vorlage auch, wenn der geänderte Eintrag in einer anderen Woche liegt', () => {
+    const slot: PlanSlot = { id: 's1', weekday: 2, time: '18:00', data: { sport: 'tennis' }, valid_from: '2026-10-01', valid_to: null };
+    const from = new Date('2026-11-02T00:00:00');
+    const to = new Date('2026-11-09T00:00:00');
+    expect(expandSlots([slot], [], from, to)).toHaveLength(1);
+    expect(expandSlots([slot], [], from, to, ['slot:s1:2026-11-03'])).toHaveLength(0);
+  });
 });

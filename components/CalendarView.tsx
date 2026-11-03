@@ -7,7 +7,7 @@ import { matchPlans, workoutFromPlan, type PlanState, type PlanStatus } from '..
 import { addDays, dayKey, formatTime, localIso, startOfDay } from '../lib/time';
 import { entryTitle, summarize } from '../lib/format';
 import { EntryIcon, Icons } from './icons';
-import { listSlots } from '../lib/planSlotsApi';
+import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, fromSlot, isVirtual, visiblePlans } from '../lib/planTemplate';
 import EntryEditor, { type Draft } from './EntryEditor';
 import TrainingPlanView from './TrainingPlanView';
@@ -61,11 +61,11 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
     setLoading(true);
     setError(null);
     try {
-      const from = weekStart(new Date(wsKey));
+      const from = weekStart(new Date(`${wsKey}T12:00:00`)); // lokal, nicht UTC
       const to = addDays(from, 7);
-      const [list, sl] = await Promise.all([listEntries(from, to), listSlots()]);
+      const [list, sl, overrides] = await Promise.all([listEntries(from, to), listSlots(), listSlotOverrideIds()]);
       setSlots(sl);
-      setEntries(visiblePlans([...list, ...expandSlots(sl, list, from, to)]));
+      setEntries(visiblePlans([...list, ...expandSlots(sl, list, from, to, overrides)]));
     } catch (e: any) {
       setError(e.message);
     } finally {

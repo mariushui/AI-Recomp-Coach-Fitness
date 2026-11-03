@@ -27,3 +27,13 @@ export async function endSlots(ids: string[]): Promise<void> {
   const { error } = await supabase.from('plan_slots').update({ valid_to: yesterday }).in('id', ids);
   if (error) throw error;
 }
+
+/**
+ * external_ids aller Einträge, die eine Wochenplan-Einheit überschreiben (geändert, verschoben, gestrichen).
+ * Unabhängig vom Zeitraum, damit eine in eine andere Woche verschobene Einheit am Ursprungstag nicht erneut erscheint.
+ */
+export async function listSlotOverrideIds(): Promise<string[]> {
+  const { data, error } = await supabase.from('entries').select('external_id').eq('kind', 'plan').like('external_id', 'slot:%');
+  if (error) throw error;
+  return ((data ?? []) as { external_id: string }[]).map((r) => r.external_id);
+}

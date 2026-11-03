@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { EntryKind, NewEntry } from '../supabase/functions/_shared/domain';
+import type { EntryKind, EntrySource, NewEntry } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
 import { insertEntries, parseText } from '../lib/entries';
 import { prepareImage, type PreparedImage } from '../lib/image';
@@ -66,10 +66,8 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   });
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
-  const [rawText, setRawText] = useState<string | null>(null);
   const [usedVoice, setUsedVoice] = useState(false);
   const [photo, setPhoto] = useState<PreparedImage | null>(null);
-  const [usedPhoto, setUsedPhoto] = useState(false);
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
   const [asTemplate, setAsTemplate] = useState(false);
@@ -115,13 +113,11 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
       if (r.entries.length === 0) {
         setError(photo ? 'Kein Essen erkannt. Schreib dazu, was auf dem Teller ist.' : 'Nichts erkannt. Du kannst den Text als Notiz speichern.');
       }
-      setDrafts((prev) => [...prev, ...r.entries.map((e) => ({ ...e }))]);
+      const source: EntrySource = photo ? 'photo' : usedVoice ? 'voice' : 'text';
+      setDrafts((prev) => [...prev, ...r.entries.map((e) => ({ ...e, source, raw_text: text || null }))]);
+      setUsedVoice(false);
       setQuestions(r.questions);
-      setRawText(text);
-      if (photo && r.entries.length > 0) {
-        setUsedPhoto(true);
-        setPhoto(null);
-      }
+      if (photo && r.entries.length > 0) setPhoto(null);
       if (/(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(text)) setAsTemplate(true);
     } catch (e: any) {
       setError(`KI nicht erreichbar: ${e.message}. Der Text bleibt erhalten, du kannst ihn als Notiz speichern.`);
@@ -131,8 +127,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   };
 
   const saveAsNote = () => {
-    setDrafts((prev) => [...prev, { kind: 'note', occurred_at: localIso(), data: { text } }]);
-    setRawText(text);
+    setDrafts((prev) => [...prev, { kind: 'note', occurred_at: localIso(), data: { text }, source: usedVoice ? 'voice' : 'text', raw_text: text }]);
   };
 
   const saveAll = async () => {
@@ -153,8 +148,8 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
           kind: d.kind,
           occurred_at: d.occurred_at,
           data,
-          source: d.manual || (rawText === null && !usedPhoto) ? 'manual' : usedPhoto ? 'photo' : usedVoice ? 'voice' : 'text',
-          raw_text: d.manual || !rawText ? null : rawText,
+          source: d.manual ? 'manual' : (d.source ?? 'text'),
+          raw_text: d.manual ? null : (d.raw_text ?? null),
         });
       }
       if (rows.length === 0 && templatePlans.length === 0) {
@@ -175,9 +170,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
       setDrafts([]);
       setQuestions([]);
       setText('');
-      setRawText(null);
       setUsedVoice(false);
-      setUsedPhoto(false);
       onSaved();
     } catch (e: any) {
       setError(`Speichern fehlgeschlagen: ${e.message}`);

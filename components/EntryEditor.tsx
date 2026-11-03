@@ -5,6 +5,7 @@ import {
   SPORT_LABEL,
   SPORT_CATEGORY,
   type EntryKind,
+  type EntrySource,
   type StrengthSet,
 } from '../supabase/functions/_shared/domain';
 import { summarize } from '../lib/format';
@@ -17,6 +18,8 @@ export interface Draft {
   occurred_at: string;
   data: any;
   manual?: boolean; // ohne KI angelegt
+  source?: EntrySource; // wie der Entwurf entstanden ist, beim Erkennen festgehalten
+  raw_text?: string | null;
 }
 
 interface Props {

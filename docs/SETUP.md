@@ -60,6 +60,12 @@ supabase functions deploy parse-log
 supabase functions deploy health-ingest --no-verify-jwt
 ```
 
+```bash
+supabase functions deploy health-export --no-verify-jwt
+```
+
+Nach jeder Änderung an `supabase/functions/` die betroffene Funktion erneut deployen.
+
 Optional: `supabase secrets set GEMINI_MODEL=...`, falls du ein anderes Gemini-Modell willst. Standard ist `gemini-3.8-flash`.
 
 ## 5. Lokal starten
