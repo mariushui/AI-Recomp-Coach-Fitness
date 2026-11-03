@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, Respo
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
+import { BASELINE_DAYS, dailyRecovery, dailyStrain } from '../lib/recovery';
 import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
@@ -24,8 +25,9 @@ const CHARTS = [
   { key: 'heart', label: 'Herz: Ruhepuls, HRV, Cardio-Erholung' },
   { key: 'sleep', label: 'Schlaf' },
   { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
+  { key: 'recovery', label: 'Erholung und Belastung' },
 ] as const;
-const CHART_KEY = 'recomp_trend_charts_v2';
+const CHART_KEY = 'recomp_trend_charts_v3';
 const RANGE_KEY = 'recomp_trend_range';
 const loadRange = (): Range => {
   try {
@@ -61,7 +63,8 @@ type Series = { key: string; label: string; color: string };
 const BODY: Series[] = [
   { key: 'weight', label: 'Gewicht', color: '#ADFF2F' },
   { key: 'fatMass', label: 'Fett kg', color: '#FF6B00' },
-  { key: 'leanMass', label: 'Magermasse kg', color: '#00F0FF' },
+  { key: 'leanMass', label: 'Fettfrei kg', color: '#00F0FF' },
+  { key: 'muscle', label: 'Muskeln kg (Waage)', color: '#34D399' },
   { key: 'bodyFat', label: 'Körperfett %', color: '#FBBF24' },
   { key: 'bmi', label: 'BMI', color: '#F472B6' },
 ];
@@ -162,12 +165,13 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     }
   };
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [pre, setPre] = useState<Entry[]>([]); // 30 Tage vor dem Zeitraum, nur als Vergleichsbasis für die Erholung
   const [error, setError] = useState<string | null>(null);
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heightCm, setHeightCm] = useState<number | null>(null);
-  const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null }>({});
-  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'leanMass', 'bmi']);
+  const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null; carbs?: number | null; fat?: number | null }>({});
+  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'muscle', 'bmi']);
   const [macroOn, toggleMacro] = useToggleSet(['protein', 'carbs', 'fat']);
   const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
   const [activityOn, toggleActivity] = useToggleSet(['steps', 'activeKcal', 'exerciseMin']);
@@ -184,13 +188,16 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     loadProfile()
       .then((p) => {
         setHeightCm(p.height_cm ?? null);
-        setGoals({ protein: p.protein_goal_g, kcal: p.kcal_goal });
+        setGoals({ protein: p.protein_goal_g, kcal: p.kcal_goal, carbs: p.carbs_goal_g, fat: p.fat_goal_g });
       })
       .catch(() => undefined);
   }, []);
   useEffect(() => {
-    Promise.all([listEntries(from, to), listSlots(), listSlotOverrideIds()])
-      .then(([list, slots, overrides]) => setEntries(visiblePlans([...list, ...expandSlots(slots, list, from, to, overrides)])))
+    Promise.all([listEntries(from, to), listSlots(), listSlotOverrideIds(), listEntries(addDays(from, -BASELINE_DAYS), from)])
+      .then(([list, slots, overrides, before]) => {
+        setEntries(visiblePlans([...list, ...expandSlots(slots, list, from, to, overrides)]));
+        setPre(before);
+      })
       .catch((e) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, refreshKey]);
@@ -211,9 +218,19 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
 
   const data = useMemo(() => {
     const days = dailyStats(entries, from, to).map((d) => ({ ...d, bmi: bmi(d.weight, heightCm) }));
+    // Erholung braucht 30 Tage Vorlauf als Vergleich, deshalb über den erweiterten Zeitraum rechnen
+    const extFrom = addDays(from, -BASELINE_DAYS);
+    const ext = dailyStats([...pre, ...entries], extFrom, to);
+    const recovery = dailyRecovery(ext);
+    const strain = dailyStrain([...pre, ...entries], ext);
+    const recByDay = new Map(ext.map((d, i) => [d.day, recovery[i]]));
+    days.forEach((d) => {
+      (d as any).recovery = recByDay.get(d.day);
+      (d as any).strain = strain.get(d.day);
+    });
     const bs = buckets(from, to, g, range);
     const rows = aggregate(days as any, bs, [
-      'weight', 'fatMass', 'leanMass', 'bodyFat', 'bmi' as any,
+      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any,
       'protein', 'carbs', 'fat', 'kcal',
       'steps', 'activeKcal', 'exerciseMin',
       'restingHr', 'hrv', 'hrRecovery', 'sleepH', 'vo2max', 'spo2',
@@ -233,7 +250,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     const pastPlans = states.filter((s) => dayKey(s.plan.occurred_at) <= today);
     return { days, rows, training, planDone: pastPlans.filter((s) => s.status === 'erledigt').length, planTotal: pastPlans.length };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, heightCm, range]);
+  }, [entries, pre, heightCm, range]);
 
   const { days, rows, training } = data;
   const sportsUsed = SPORTS.filter((s) => training.some((r) => r[s] || r[`${s}_plan`]));
@@ -297,6 +314,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="weight" {...axis} domain={['dataMin - 1', 'dataMax + 1']} width={36} allowDecimals={false} hide={!bodyOn.has('weight')} />
             <YAxis yAxisId="fatMass" domain={['dataMin - 1', 'dataMax + 1']} hide />
             <YAxis yAxisId="leanMass" domain={['dataMin - 1', 'dataMax + 1']} hide />
+            <YAxis yAxisId="muscle" domain={['dataMin - 1', 'dataMax + 1']} hide />
             <YAxis yAxisId="pct" orientation="right" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={30} allowDecimals={false} hide={!bodyOn.has('bodyFat') && !bodyOn.has('bmi')} />
             <Tooltip {...tooltipStyle} />
             {dots && bodyOn.has('weight') && (
@@ -328,6 +346,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
             {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
+            {goals.carbs && macroOn.has('carbs') && <ReferenceLine yAxisId="g" y={goals.carbs} ifOverflow="extendDomain" stroke="#38BDF8" strokeDasharray="4 4" />}
+            {goals.fat && macroOn.has('fat') && <ReferenceLine yAxisId="g" y={goals.fat} ifOverflow="extendDomain" stroke="#FBBF24" strokeDasharray="4 4" />}
             {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line
@@ -419,6 +439,25 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Tooltip {...tooltipStyle} />
             <Line yAxisId="vo2" dataKey="vo2max" name="VO2max (ml/kg/min)" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />
             <Line yAxisId="spo2" dataKey="spo2" name="Blutsauerstoff %" stroke="#F472B6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          </ComposedChart>
+        </Chart>
+      )}
+
+      {show('recovery') && (has(rows, 'recovery') || has(rows, 'strain')) && (
+        <Chart
+          title="Erholung und Belastung"
+          summary={`Ø Erholung ${average(days, 'recovery' as any) ?? '–'} · Ø Belastung ${average(days, 'strain' as any) ?? '–'} pro Tag`}
+          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Belastung (0 bis 21) = Trainingsminuten mal RPE geteilt durch 60, ohne RPE gilt 5. Hohe Belastung bei niedriger Erholung ist das Muster, das du vermeiden willst."
+        >
+          <ComposedChart data={rows}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            {xAxis}
+            <YAxis yAxisId="rec" {...axis} domain={[0, 100]} width={30} ticks={[0, 25, 50, 75, 100]} />
+            <YAxis yAxisId="strain" orientation="right" {...axis} domain={[0, 21]} width={28} ticks={[0, 7, 14, 21]} />
+            <Tooltip {...tooltipStyle} />
+            <Bar yAxisId="strain" dataKey="strain" name="Belastung" fill="#FF6B00" fillOpacity={0.55} radius={[3, 3, 0, 0]} />
+            <ReferenceLine yAxisId="rec" y={50} stroke="#334155" strokeDasharray="3 3" />
+            <Line yAxisId="rec" dataKey="recovery" name="Erholung" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />
           </ComposedChart>
         </Chart>
       )}

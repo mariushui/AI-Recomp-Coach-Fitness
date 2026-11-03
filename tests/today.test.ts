@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { goalRatio, todaySummary } from '../lib/today';
+import { goalColor, goalRatio, todaySummary } from '../lib/today';
 import type { Entry } from '../supabase/functions/_shared/domain';
 
 const NOW = new Date('2026-11-03T15:00:00+01:00');
@@ -55,5 +55,14 @@ describe('goalRatio', () => {
     expect(goalRatio(200, 160)).toBe(1);
     expect(goalRatio(undefined, 160)).toBe(0);
     expect(goalRatio(80, undefined)).toBeNull();
+  });
+
+  it('färbt gleitend: Protein Richtung Grün, Kalorien Richtung Orange und Rot', () => {
+    expect(goalColor(50, 160, 'more')).toBe('#8B5CF6');
+    expect(goalColor(160, 160, 'more')).toBe('rgb(173,255,47)');
+    expect(goalColor(1000, 2500, 'less')).toBe('#8B5CF6');
+    expect(goalColor(2500, 2500, 'less')).toBe('rgb(255,107,0)');
+    expect(goalColor(3000, 2500, 'less')).toBe('rgb(255,55,95)');
+    expect(goalColor(100, undefined, 'less')).toBe('#8B5CF6');
   });
 });

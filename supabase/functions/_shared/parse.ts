@@ -33,7 +33,7 @@ export const RESPONSE_SCHEMA = {
             type: 'OBJECT',
             properties: {
               description: S(),
-              meal_type: E(['fruehstueck', 'mittag', 'abend', 'snack', 'shake']),
+              meal_type: E(['fruehstueck', 'mittag', 'abend', 'snack', 'shake', 'ergaenzung']),
               items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { name: S(), amount: S() } } },
               protein_g: N(),
               kcal: N(),
@@ -91,7 +91,7 @@ export const RESPONSE_SCHEMA = {
           },
           body: {
             type: 'OBJECT',
-            properties: { weight_kg: N(), body_fat_pct: N(), waist_cm: N(), bp_systolic: N(), bp_diastolic: N() },
+            properties: { weight_kg: N(), body_fat_pct: N(), waist_cm: N(), muscle_kg: N('Muskelmasse laut Waage'), bp_systolic: N(), bp_diastolic: N() },
           },
           wellbeing: {
             type: 'OBJECT',
@@ -127,6 +127,7 @@ Ziele des Nutzers: lange gesund bleiben, Körperfett senken und Muskeln aufbauen
 Regeln:
 - Ein Eintrag pro Mahlzeit, pro Trainingseinheit, pro Messung. Befinden in einem Eintrag zusammenfassen.
 - occurred_at: Leite die Zeit aus dem Text ab ("heute morgen", "gestern Abend", "nach dem Training"). Ohne Angabe die aktuelle Zeit verwenden. Immer mit dem Zeitzonen-Offset aus dem Kontext.
+- Ergänzungsmittel (Kreatin, Whey ohne Mahlzeit, Vitamin D, Omega-3, Magnesium, Elektrolyte): meal mit meal_type "ergaenzung", items mit Name und Menge (z. B. "Kreatin", "5 g"), description = Aufzählung. Makros nur, wenn nennenswert (Whey: Protein und kcal).
 - Mahlzeiten: Zutaten mit Menge auflisten. Protein, kcal, Kohlenhydrate und Fett realistisch schätzen. Protein ist am wichtigsten. confidence = low, wenn Mengen fehlen.
 - Training: sport aus der Liste wählen, sonst "sonstiges" mit sport_label. Bei Tennis und Capoeira focus, high und low erfassen, wenn genannt. Bei Kraft jede Übung mit Sätzen, Wiederholungen, Gewicht in kg. Bei Laufen Distanz und Pace.
 - Vorhaben sind plan, nicht workout: alles in der Zukunft oder mit "will", "plane", "vorgenommen", "morgen", "nächste Woche", "am Donnerstag".

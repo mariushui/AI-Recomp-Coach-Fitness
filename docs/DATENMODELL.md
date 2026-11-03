@@ -18,8 +18,9 @@ Quelle der Wahrheit im Code: `supabase/functions/_shared/domain.ts`. Schema: `su
 
 ## Arten und Felder
 
-**meal** (Mahlzeit): `description`, `meal_type` (fruehstueck, mittag, abend, snack, shake), `items[]` (name, amount), `protein_g`, `kcal`, `carbs_g`, `fat_g`, `confidence` (low, medium, high).
+**meal** (Mahlzeit): `description`, `meal_type` (fruehstueck, mittag, abend, snack, shake, ergaenzung), `items[]` (name, amount), `protein_g`, `kcal`, `carbs_g`, `fat_g`, `confidence` (low, medium, high).
 Makros sind KI-Schätzungen. Protein ist der wichtigste Wert.
+`ergaenzung` = Kreatin, Vitamine, Omega-3 usw. als `items` (name, amount), meist ohne Makros. Mikronährstoffe werden nicht geschätzt.
 Aus einem Foto (Kamera oder Mediathek) schätzt die KI Zutaten, Mengen und Makros. Das Foto selbst wird nicht gespeichert, nur die bestätigten Werte mit `source = photo`.
 
 **workout** (Training): `sport` (tennis, laufen, capoeira, kraft, rad, schwimmen, mobility, sonstiges), `sport_label`, `session_type` (training, stunde, match, wettkampf, frei), `duration_min`, `rpe` (1-10).
@@ -40,6 +41,7 @@ Wird eine Einheit nur für eine Woche geändert, gestrichen (`status: entfernt`)
 Änderungen am Plan gelten ab heute: Die alte Einheit endet gestern, eine neue beginnt heute. Vergangene Wochen bleiben so, wie sie geplant waren.
 
 **body** (Körperwerte, manuell): `weight_kg`, `body_fat_pct`, `waist_cm`, `bp_systolic`, `bp_diastolic`.
+`muscle_kg` = Muskelmasse laut Waage. Je nach Hersteller fettfreie Masse ohne Knochen (Withings, etwa 90 % der fettfreien Masse) oder nur Skelettmuskulatur (etwa 40 % des Gewichts). Die fettfreie Masse (Gewicht minus Fett) rechnet die App selbst aus `weight_kg` und `body_fat_pct`.
 
 **wellbeing** (Befinden), Skalen 1 bis 5: `energy`, `mood`, `sleep_quality`, `stress`, `soreness`, `joint_pain`, `focus`, `appetite`. Dazu `soreness_areas[]`, `joint_pain_areas[]`, `notes`.
 Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 „gut“.

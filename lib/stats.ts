@@ -12,7 +12,8 @@ export interface DayStats {
   kcal?: number;
   carbs?: number;
   fat?: number;
-  leanMass?: number; // magere Körpermasse in kg = Gewicht x (1 - KFA)
+  leanMass?: number; // fettfreie Masse in kg = Gewicht x (1 - KFA). Nicht die Muskelmasse der Waage.
+  muscle?: number; // Muskelmasse in kg, wie die Waage sie zeigt (Skelettmuskulatur)
   fatMass?: number; // Fettmasse in kg = Gewicht x KFA
   trainingMin?: number;
   sleepH?: number;
@@ -52,6 +53,7 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         if (b.weight_kg !== undefined && s.weight === undefined) s.weight = b.weight_kg;
         if (b.body_fat_pct !== undefined && s.bodyFat === undefined) s.bodyFat = b.body_fat_pct;
         if (b.waist_cm !== undefined) s.waist = b.waist_cm;
+        if (b.muscle_kg !== undefined) s.muscle = b.muscle_kg;
         break;
       }
       case 'meal': {
