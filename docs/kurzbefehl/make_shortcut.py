@@ -44,7 +44,7 @@ actions = []
 
 def find(sample_type, limit):
     u = str(uuid.uuid4()).upper()
-    actions.append(action("is.workflow.actions.filter.health", {
+    actions.append(action("is.workflow.actions.filter.health.quantity", {
         "WFHealthSampleType": sample_type,
         "WFContentItemSortProperty": "Start Date",
         "WFContentItemSortOrder": "Latest First",
@@ -55,7 +55,7 @@ def find(sample_type, limit):
 
 def detail(find_uuid, prop):
     u = str(uuid.uuid4()).upper()
-    actions.append(action("is.workflow.actions.properties.health", {
+    actions.append(action("is.workflow.actions.properties.health.quantity", {
         "WFContentItemPropertyName": prop,
         "WFInput": ref(find_uuid, "Health Samples"),
     }, u))
