@@ -124,6 +124,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
     });
 
   const endpoint = `${functionsUrl}/health-ingest`;
+  const exportEndpoint = `${functionsUrl}/health-export`;
 
   return (
     <div className="space-y-4">
@@ -143,6 +144,9 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       <Section title="Apple Health">
         <p className="text-sm text-slate-300">
           Ein iOS-Kurzbefehl schickt Gewicht, Körperfett, Schlaf, HRV, Ruhepuls, VO2max, Blutsauerstoff und Schritte an die App. Er sendet immer die letzten 3 Tage. Fällt ein Lauf aus, holt der nächste die Werte nach.
+        </p>
+        <p className="text-sm text-slate-300">
+          Zurück nach Apple Health gehen Kalorien, Protein, Kohlenhydrate und Fett deiner Mahlzeiten sowie Blutzucker-Laborwerte. Jeder Wert nur einmal.
         </p>
         <p className="text-sm text-slate-400">
           Status:{' '}
@@ -170,6 +174,11 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
           <code className="block text-xs break-all text-slate-300">{endpoint}</code>
           <Button variant="ghost" className="w-full" onClick={() => copy(endpoint, 'url')}>
             {copied === 'url' ? 'Kopiert' : 'Adresse kopieren'}
+          </Button>
+          <p className="text-xs text-slate-500 pt-2">Adresse für den Rückweg nach Apple Health</p>
+          <code className="block text-xs break-all text-slate-300">{exportEndpoint}</code>
+          <Button variant="ghost" className="w-full" onClick={() => copy(exportEndpoint, 'export')}>
+            {copied === 'export' ? 'Kopiert' : 'Adresse kopieren'}
           </Button>
         </div>
         <div className="flex gap-2">

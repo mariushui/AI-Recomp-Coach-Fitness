@@ -14,6 +14,7 @@ Quelle der Wahrheit im Code: `supabase/functions/_shared/domain.ts`. Schema: `su
 | `data` | jsonb | Inhalt je nach Art |
 | `raw_text` | text | Original-Diktat, falls per Sprache oder Text erfasst |
 | `external_id` | text | Eindeutiger Schlüssel für Health-Sync und Import, verhindert Dubletten |
+| `health_exported_at` | timestamptz | Wann der Kurzbefehl den Eintrag nach Apple Health geschrieben hat. Nur `meal` und Blutzucker aus `lab` |
 
 ## Arten und Felder
 
