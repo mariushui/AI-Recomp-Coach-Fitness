@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
-import { BASELINE_DAYS, dailyRecovery, dailyStrain } from '../lib/recovery';
+import { BASELINE_DAYS, dailyRecovery, dailyStrain, recoveryLabel, strainTarget } from '../lib/recovery';
 import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
@@ -64,6 +64,12 @@ const HEART: Series[] = [
   { key: 'hrv', label: 'HRV ms', color: '#00F0FF' },
   { key: 'hrRecovery', label: 'Cardio-Erholung bpm', color: '#ADFF2F' },
 ];
+
+/** Punkt der Erholungslinie in der Ampelfarbe des Werts */
+const RecoveryDot: React.FC<any> = ({ cx, cy, value }) => {
+  if (typeof cx !== 'number' || typeof cy !== 'number' || value === undefined || value === null) return null;
+  return <circle cx={cx} cy={cy} r={3.5} fill={recoveryLabel(value).color} stroke="#0a0a0b" strokeWidth={1} />;
+};
 
 const axis = { stroke: '#475569', fontSize: 11 };
 const tooltipStyle = { contentStyle: { background: '#121214', border: '1px solid #333', borderRadius: 12, fontSize: 12 } };
@@ -192,12 +198,16 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     const strain = dailyStrain([...pre, ...entries], ext);
     const recByDay = new Map(ext.map((d, i) => [d.day, recovery[i]]));
     days.forEach((d) => {
-      (d as any).recovery = recByDay.get(d.day);
+      const r = recByDay.get(d.day);
+      (d as any).recovery = r;
       (d as any).strain = strain.get(d.day);
+      const t = strainTarget(r);
+      (d as any).strainLo = t?.lo;
+      (d as any).strainHi = t?.hi;
     });
     const bs = buckets(from, to, g, range);
     const rows = aggregate(days as any, bs, [
-      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any,
+      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any, 'strainLo' as any, 'strainHi' as any,
       'protein', 'carbs', 'fat', 'kcal',
       'steps', 'activeKcal', 'exerciseMin',
       'restingHr', 'hrv', 'hrRecovery', 'sleepH', 'vo2max', 'spo2',
@@ -211,6 +221,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     } else {
       rows.forEach((r) => BODY.forEach((s) => (r[`${s.key}Line`] = r[s.key])));
     }
+    rows.forEach((r) => {
+      r.strainBand = r.strainLo !== undefined && r.strainHi !== undefined ? [r.strainLo, r.strainHi] : undefined;
+    });
     const states = matchPlans(entries);
     const training = trainingRows(entries, states, bs, g);
     const today = dayKey(new Date());
@@ -397,17 +410,17 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         <Chart
           title="Erholung und Belastung"
           summary={`Ø Erholung ${average(days, 'recovery' as any) ?? '–'} · Ø Belastung ${average(days, 'strain' as any) ?? '–'} pro Tag`}
-          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Belastung (0 bis 10, Marathon = 10) aus Trainingsminuten mal RPE, ohne RPE gilt ein Wert je Sportart. Unten steigt sie schnell, die letzten Punkte sind sehr schwer. Hohe Belastung bei niedriger Erholung ist das Muster, das du vermeiden willst."
+          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Punkte: grün ab 67, gelb ab 34, rot darunter. Belastung (0 bis 10, Marathon = 10) aus Trainingsminuten mal RPE, ohne RPE gilt ein Wert je Sportart. Das graue Band ist der Zielbereich der Belastung, er steigt mit der Erholung. Belastung im Band = passend trainiert, darüber bei roter Erholung ist das Muster, das du vermeiden willst."
         >
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
-            <YAxis yAxisId="rec" {...axis} domain={[0, 100]} width={30} ticks={[0, 25, 50, 75, 100]} />
-            <YAxis yAxisId="strain" orientation="right" {...axis} domain={[0, 10]} width={28} ticks={[0, 2.5, 5, 7.5, 10]} />
-            <Tooltip {...tooltipStyle} />
-            <Bar yAxisId="strain" dataKey="strain" name="Belastung" fill="#FF6B00" fillOpacity={0.55} radius={[3, 3, 0, 0]} />
-            <ReferenceLine yAxisId="rec" y={50} stroke="#334155" strokeDasharray="3 3" />
-            <Line yAxisId="rec" dataKey="recovery" name="Erholung" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+            <YAxis yAxisId="strain" {...axis} domain={[0, 10]} width={30} ticks={[0, 3.3, 6.6, 10]} tickFormatter={(v: number) => v.toFixed(1)} />
+            <YAxis yAxisId="rec" orientation="right" {...axis} domain={[0, 100]} width={34} ticks={[0, 33, 66, 100]} unit="%" />
+            <Tooltip {...tooltipStyle} formatter={(v: any, name: string) => (Array.isArray(v) ? [`${v[0]} bis ${v[1]}`, name] : [v, name])} />
+            <Area yAxisId="strain" dataKey="strainBand" name="Zielbereich Belastung" stroke="none" fill="#94a3b8" fillOpacity={0.18} connectNulls isAnimationActive={false} />
+            <Line yAxisId="rec" dataKey="recovery" name="Erholung %" stroke="#94a3b8" strokeWidth={2} dot={<RecoveryDot />} connectNulls />
+            <Line yAxisId="strain" dataKey="strain" name="Belastung" stroke="#38BDF8" strokeWidth={2} dot={{ r: 2.5, fill: '#38BDF8', stroke: 'none' }} connectNulls />
           </ComposedChart>
         </Chart>
       )}

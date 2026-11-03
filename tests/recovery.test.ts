@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dailyRecovery, dailyStrain, recoveryAt, recoveryLabel, strainFromLoad, strainLabel } from '../lib/recovery';
+import { dailyRecovery, dailyStrain, recoveryAt, recoveryLabel, sleepScore, strainFromLoad, strainLabel, strainTarget, strainVsTarget } from '../lib/recovery';
 import type { DayStats } from '../lib/stats';
 import type { Entry } from '../supabase/functions/_shared/domain';
 
@@ -68,13 +68,33 @@ describe('dailyStrain', () => {
 
 describe('Labels', () => {
   it('ordnet Werte ein', () => {
-    expect(recoveryLabel(80).text).toBe('gut erholt');
-    expect(recoveryLabel(50).text).toBe('mittel');
-    expect(recoveryLabel(10).text).toBe('wenig erholt');
+    expect(recoveryLabel(80).text).toBe('bereit für Training');
+    expect(recoveryLabel(50).text).toBe('mittel erholt');
+    expect(recoveryLabel(10).text).toContain('wenig erholt');
     expect(recoveryLabel(undefined).text).toContain('Vergleichswerte');
     expect(strainLabel(2)).toBe('leicht');
     expect(strainLabel(5)).toBe('moderat');
     expect(strainLabel(7)).toBe('hoch');
     expect(strainLabel(9.3)).toBe('sehr hoch');
+  });
+});
+
+describe('Zielbereich und Schlaf', () => {
+  it('Zielbereich der Belastung steigt mit der Erholung', () => {
+    expect(strainTarget(74)).toEqual({ lo: 4.6, hi: 7 });
+    expect(strainTarget(100)).toEqual({ lo: 6.1, hi: 8.5 });
+    expect(strainTarget(30)).toEqual({ lo: 2.2, hi: 4.6 });
+    expect(strainTarget(undefined)).toBeUndefined();
+  });
+  it('ordnet die Belastung zum Ziel ein', () => {
+    expect(strainVsTarget(3.8, strainTarget(74))).toBe('unter');
+    expect(strainVsTarget(5.5, strainTarget(74))).toBe('im Ziel');
+    expect(strainVsTarget(8, strainTarget(74))).toBe('über');
+    expect(strainVsTarget(undefined, strainTarget(74))).toBeUndefined();
+  });
+  it('Schlaf in Prozent von 9 Stunden', () => {
+    expect(sleepScore(7.5)).toBe(83);
+    expect(sleepScore(10)).toBe(100);
+    expect(sleepScore(undefined)).toBeUndefined();
   });
 });

@@ -101,11 +101,37 @@ export function dailyStrain(entries: Entry[], days: DayStats[]): Map<string, num
   return out;
 }
 
+/**
+ * Zielbereich der Belastung je nach Erholung, wie der Zielkorridor bei Athlytic: gut erholt darf mehr.
+ * Erholung 100 → 6,1 bis 8,5, Erholung 74 → 4,6 bis 7,0, Erholung 30 → 2,2 bis 4,6.
+ */
+export function strainTarget(recovery: number | undefined): { lo: number; hi: number } | undefined {
+  if (recovery === undefined) return undefined;
+  const lo = Math.round((0.5 + clamp(recovery, 0, 100) * 0.056) * 10) / 10;
+  return { lo, hi: Math.round((lo + 2.4) * 10) / 10 };
+}
+
+/** Wo steht die Belastung zum Zielbereich? */
+export function strainVsTarget(strain: number | undefined, target: { lo: number; hi: number } | undefined): 'unter' | 'im Ziel' | 'über' | undefined {
+  if (strain === undefined || !target) return undefined;
+  if (strain < target.lo) return 'unter';
+  if (strain > target.hi) return 'über';
+  return 'im Ziel';
+}
+
+export const SLEEP_FULL_H = 9; // 9 h Schlaf = 100 %, 7 h 30 = 83 %
+
+/** Schlaf der Nacht in Prozent eines vollen Schlafs. */
+export function sleepScore(sleepH: number | undefined): number | undefined {
+  if (sleepH === undefined) return undefined;
+  return Math.round(clamp(sleepH / SLEEP_FULL_H, 0, 1) * 100);
+}
+
 export function recoveryLabel(score: number | undefined): { text: string; color: string } {
   if (score === undefined) return { text: 'noch keine Vergleichswerte', color: '#64748b' };
-  if (score >= 67) return { text: 'gut erholt', color: '#ADFF2F' };
-  if (score >= 34) return { text: 'mittel', color: '#F59E0B' };
-  return { text: 'wenig erholt', color: '#FF375F' };
+  if (score >= 67) return { text: 'bereit für Training', color: '#ADFF2F' };
+  if (score >= 34) return { text: 'mittel erholt', color: '#F59E0B' };
+  return { text: 'wenig erholt, locker', color: '#FF375F' };
 }
 
 export function strainLabel(strain: number | undefined): string {
