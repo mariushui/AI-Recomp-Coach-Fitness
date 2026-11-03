@@ -332,8 +332,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="min" hide />
             <Tooltip {...tooltipStyle} />
             {activityOn.has('steps') && <Bar yAxisId="steps" dataKey="steps" name="Schritte" fill="#334155" radius={[3, 3, 0, 0]} />}
-            {activityOn.has('activeKcal') && <Line yAxisId="kcal" dataKey="activeKcal" name="Bewegen (aktive kcal)" stroke="#FF375F" strokeWidth={2} dot={false} connectNulls />}
-            {activityOn.has('exerciseMin') && <Line yAxisId="min" dataKey="exerciseMin" name="Trainieren (min)" stroke="#ADFF2F" strokeWidth={2} dot={false} connectNulls />}
+            {activityOn.has('activeKcal') && <Line yAxisId="kcal" dataKey="activeKcal" name="Bewegen (aktive kcal)" stroke="#FF375F" strokeWidth={2} dot={{ r: 2 }} connectNulls />}
+            {activityOn.has('exerciseMin') && <Line yAxisId="min" dataKey="exerciseMin" name="Trainieren (min)" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />}
           </ComposedChart>
         </Chart>
       )}
@@ -346,7 +346,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis {...axis} width={32} domain={['dataMin - 5', 'dataMax + 5']} allowDecimals={false} />
             <Tooltip {...tooltipStyle} />
             {HEART.filter((h) => heartOn.has(h.key)).map((h) => (
-              <Line key={h.key} dataKey={h.key} name={h.label} stroke={h.color} strokeWidth={2} dot={h.key === 'hrRecovery' ? { r: 2 } : false} connectNulls />
+              <Line key={h.key} dataKey={h.key} name={h.label} stroke={h.color} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             ))}
           </ComposedChart>
         </Chart>
@@ -373,7 +373,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="spo2" orientation="right" {...axis} domain={[90, 100]} width={32} unit="%" />
             <Tooltip {...tooltipStyle} />
             <Line yAxisId="vo2" dataKey="vo2max" name="VO2max (ml/kg/min)" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />
-            <Line yAxisId="spo2" dataKey="spo2" name="Blutsauerstoff %" stroke="#F472B6" dot={false} connectNulls />
+            <Line yAxisId="spo2" dataKey="spo2" name="Blutsauerstoff %" stroke="#F472B6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
           </ComposedChart>
         </Chart>
       )}
