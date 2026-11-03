@@ -10,9 +10,12 @@ import { RESPONSE_SCHEMA, buildSystemPrompt, buildUserPrompt, normalizeParseResu
 import { checkImage, type ImageInput } from '../_shared/image.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
-const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash';
 const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? '60');
 const MAX_CHARS = 4000;
+// Unter dem Zeitlimit der Edge Function (150 s), damit die App eine klare Meldung bekommt statt eines Abbruchs.
+const GEMINI_TIMEOUT_MS = 60_000;
+const BUSY = 'Die KI ist gerade überlastet. Versuch es in ein paar Minuten nochmal.';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -48,10 +51,11 @@ Deno.serve(async (req) => {
   if (quotaError) return json({ error: 'Kontingent-Prüfung fehlgeschlagen' }, 500);
   if (!allowed) return json({ error: `Tageslimit von ${DAILY_LIMIT} KI-Anfragen erreicht` }, 429);
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
+  let res: Response;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
       method: 'POST',
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
@@ -70,10 +74,14 @@ Deno.serve(async (req) => {
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    },
-  );
+    });
+  } catch (e) {
+    console.error('Gemini timeout or network error', e);
+    return json({ error: BUSY }, 503);
+  }
   if (!res.ok) {
     console.error('Gemini error', res.status, await res.text());
+    if (res.status === 503 || res.status === 429) return json({ error: BUSY }, 503);
     return json({ error: `KI-Dienst antwortet mit Status ${res.status}` }, 502);
   }
   const out = await res.json();
