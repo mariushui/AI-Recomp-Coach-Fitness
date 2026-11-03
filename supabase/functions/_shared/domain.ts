@@ -133,6 +133,7 @@ export const HEALTH_METRICS = [
   'hrv',
   'vo2max',
   'spo2',
+  'hr_recovery',
   'steps',
   'active_kcal',
   'exercise_min',

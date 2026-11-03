@@ -137,3 +137,10 @@ describe('Aktivitätsringe', () => {
     expect(byId['exercise_min:2026-11-02']).toEqual({ metric: 'exercise_min', value: 45, unit: 'min' });
   });
 });
+
+describe('Cardio-Erholung', () => {
+  it('letzter Wert des Tages in bpm', () => {
+    const r = parseHealthPayload({ metrics: { hr_recovery: { values: '22\n27', dates: '2026-11-02T18:10:00+01:00\n2026-11-02T20:00:00+01:00' } } });
+    expect(r.rows[0].data).toEqual({ metric: 'hr_recovery', value: 27, unit: 'bpm' });
+  });
+});
