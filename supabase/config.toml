@@ -1,0 +1,9 @@
+# Minimale Supabase-Konfiguration für die Edge Functions.
+# project_id wird beim "supabase link" gesetzt und ist für das Deployment nicht nötig.
+
+[functions.parse-log]
+verify_jwt = true
+
+[functions.health-ingest]
+# Der Kurzbefehl hat kein Supabase-Login. Er authentifiziert sich mit dem eigenen Token (x-recomp-token).
+verify_jwt = false
