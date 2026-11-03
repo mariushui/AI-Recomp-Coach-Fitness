@@ -26,3 +26,6 @@ npm-debug.log*
 *.njsproj
 *.sln
 !.env.example
+
+# Erzeugte Kurzbefehl-Dateien (Token drin, nie committen)
+*.shortcut
