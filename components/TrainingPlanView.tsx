@@ -6,6 +6,7 @@ import { activeSlots, slotsFromDrafts } from '../lib/planTemplate';
 import { summarize } from '../lib/format';
 import { dayKey, localIso } from '../lib/time';
 import EntryEditor from './EntryEditor';
+import { Icons } from './icons';
 import { Button, Card, ErrorBox, Label } from './ui';
 
 type SlotDraft = Omit<PlanSlot, 'id'> & { id?: string; key: string };
@@ -171,7 +172,7 @@ const TrainingPlanView: React.FC<{ onClose: () => void; onChanged: () => void }>
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <button className="h-10 w-10 rounded-full bg-white/5" onClick={onClose} aria-label="Zurück zum Kalender">
-          ‹
+          <Icons.Left size={18} className="mx-auto" />
         </button>
         <div>
           <h2 className="font-display font-bold text-slate-100 text-lg">Trainingsplan</h2>

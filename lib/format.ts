@@ -13,17 +13,6 @@ import {
   type HealthData,
 } from '../supabase/functions/_shared/domain';
 
-export const KIND_ICON: Record<EntryKind, string> = {
-  meal: '🍳',
-  workout: '🎾',
-  plan: '🗓️',
-  body: '⚖️',
-  wellbeing: '🙂',
-  lab: '🧪',
-  note: '📝',
-  health: '❤️',
-};
-
 const HEALTH_LABEL: Record<string, string> = {
   weight: 'Gewicht',
   body_fat: 'Körperfett',

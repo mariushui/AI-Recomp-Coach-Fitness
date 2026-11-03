@@ -5,7 +5,8 @@ import { deleteEntry, insertEntries, listEntries, updateEntry } from '../lib/ent
 import { dailyStats } from '../lib/stats';
 import { matchPlans, workoutFromPlan, type PlanState, type PlanStatus } from '../lib/plans';
 import { addDays, dayKey, formatTime, localIso, startOfDay } from '../lib/time';
-import { KIND_ICON, entryTitle, summarize } from '../lib/format';
+import { entryTitle, summarize } from '../lib/format';
+import { EntryIcon, Icons } from './icons';
 import { listSlots } from '../lib/planSlotsApi';
 import { expandSlots, fromSlot, isVirtual, visiblePlans } from '../lib/planTemplate';
 import EntryEditor, { type Draft } from './EntryEditor';
@@ -209,13 +210,13 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
               : 'Noch kein fester Plan. Jetzt einsprechen'}
           </span>
         </span>
-        <span className="text-cyber-purple text-sm font-bold">bearbeiten ›</span>
+        <span className="text-cyber-purple text-sm font-bold flex items-center gap-1">bearbeiten <Icons.Right size={14} weight="bold" /></span>
       </button>
 
       {/* Woche */}
       <div className="flex items-center justify-between">
         <button className="h-10 w-10 rounded-full bg-white/5" onClick={() => setDay(addDays(day, -7))} aria-label="Vorwoche">
-          ‹
+          <Icons.Left size={18} className="mx-auto" />
         </button>
         <button className="text-center" onClick={() => setDay(today)}>
           <div className="font-display font-bold text-slate-100">
@@ -225,7 +226,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
           {!isToday && <div className="text-xs text-cyber-purple">zu heute</div>}
         </button>
         <button className="h-10 w-10 rounded-full bg-white/5" onClick={() => setDay(addDays(day, 7))} aria-label="Folgewoche">
-          ›
+          <Icons.Right size={18} className="mx-auto" />
         </button>
       </div>
 
@@ -304,7 +305,9 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
           ) : (
             <Card key={s.plan.id} className="space-y-2">
               <button className="w-full text-left flex gap-3 items-start" onClick={() => startEdit(s.plan)}>
-                <span className="h-3 w-3 rounded-full mt-1.5 shrink-0" style={{ background: SPORT_COLOR[s.plan.data.sport] }} />
+                <span className="shrink-0 mt-0.5" style={{ color: SPORT_COLOR[s.plan.data.sport] }}>
+                  <EntryIcon kind="plan" data={s.plan.data} />
+                </span>
                 <span className="flex-1 min-w-0">
                   <span className="flex justify-between items-center text-xs gap-2">
                     <span className="font-bold text-slate-100">
@@ -317,7 +320,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
                   </span>
                   <span className="block text-sm text-slate-300 mt-0.5 break-words">{summarize('plan', s.plan.data)}</span>
                   {s.workout && (
-                    <span className="block text-xs text-cyber-green mt-1 break-words">✓ {summarize('workout', s.workout.data)}</span>
+                    <span className="flex gap-1 items-start text-xs text-cyber-green mt-1 break-words"><Icons.Check size={14} weight="bold" className="mt-0.5 shrink-0" /> {summarize('workout', s.workout.data)}</span>
                   )}
                 </span>
               </button>
@@ -359,7 +362,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
             ) : (
               <button key={e.id} onClick={() => startEdit(e)} className="w-full text-left">
                 <Card className="flex gap-3 items-start">
-                  <span className="text-xl leading-none">{KIND_ICON[e.kind]}</span>
+                  <EntryIcon kind={e.kind} data={e.data} className="text-cyber-purple shrink-0 mt-0.5" />
                   <span className="flex-1 min-w-0">
                     <span className="flex justify-between text-xs">
                       <span className="font-bold text-cyber-purple uppercase tracking-wider">{entryTitle(e)}</span>

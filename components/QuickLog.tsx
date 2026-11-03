@@ -6,7 +6,7 @@ import { prepareImage, type PreparedImage } from '../lib/image';
 import { insertSlots } from '../lib/planSlotsApi';
 import { slotsFromDrafts } from '../lib/planTemplate';
 import type { PlanData } from '../supabase/functions/_shared/domain';
-import { KIND_ICON } from '../lib/format';
+import { EntryIcon, Icons } from './icons';
 import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
 import { Button, Card, ErrorBox } from './ui';
@@ -205,7 +205,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                 speech.listening ? 'bg-red-500 animate-pulse' : 'bg-cyber-purple'
               }`}
             >
-              {speech.listening ? '■' : '🎙'}
+              {speech.listening ? <Icons.Stop size={20} weight="fill" className="mx-auto" /> : <Icons.Mic size={22} className="mx-auto" />}
             </button>
           )}
         </div>
@@ -218,7 +218,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
               aria-label="Foto entfernen"
               className="absolute -right-2 -top-2 h-8 w-8 rounded-full bg-cyber-black border border-white/20 text-sm"
             >
-              ✕
+              <Icons.Close size={14} className="mx-auto" />
             </button>
           </div>
         )}
@@ -226,10 +226,10 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
         <input ref={libraryRef} type="file" accept="image/*" className="hidden" onChange={pickPhoto} />
         <div className="grid grid-cols-2 gap-2 mt-3">
           <Button variant="ghost" onClick={() => cameraRef.current?.click()} disabled={busy !== null}>
-            📷 Foto machen
+            <span className="inline-flex items-center gap-2"><Icons.Camera size={18} /> Foto machen</span>
           </Button>
           <Button variant="ghost" onClick={() => libraryRef.current?.click()} disabled={busy !== null}>
-            🖼 Aus Mediathek
+            <span className="inline-flex items-center gap-2"><Icons.Image size={18} /> Mediathek</span>
           </Button>
         </div>
         {photo && <p className="text-xs text-slate-500 mt-2">Optional dazuschreiben, was die KI nicht sehen kann, z. B. „250 g Reis, mit Olivenöl“.</p>}
@@ -300,7 +300,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
               onClick={() => setDrafts((prev) => [...prev, { kind: q.kind, occurred_at: localIso(), data: { ...q.data }, manual: true }])}
               className="rounded-xl bg-cyber-gray border border-white/5 py-3 text-sm text-slate-200"
             >
-              <span className="block text-lg">{KIND_ICON[q.kind]}</span>
+              <EntryIcon kind={q.kind} size={24} className="mx-auto mb-1 text-slate-300" />
               {q.label}
             </button>
           ))}
