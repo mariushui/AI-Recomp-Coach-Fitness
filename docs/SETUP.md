@@ -10,7 +10,7 @@ Einmalig, etwa 30 Minuten. Du brauchst: Mac mit Terminal, GitHub-Zugang, einen G
 
 ## 2. Datenbank-Schema einspielen
 
-**SQL Editor > New query**, Inhalt von `supabase/migrations/20261103000000_init.sql` einfügen, **Run**.
+**SQL Editor > New query**, nacheinander alle Dateien aus `supabase/migrations/` in Reihenfolge der Dateinamen einfügen und jeweils **Run**.
 
 ## 3. Login einstellen
 
