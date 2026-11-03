@@ -61,7 +61,7 @@ function App() {
       </header>
 
       <main className="max-w-xl mx-auto px-4 pt-4">
-        {tab === 'log' && <QuickLog onSaved={bump} />}
+        {tab === 'log' && <QuickLog onSaved={bump} refreshKey={refreshKey} />}
         {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChanged={bump} />}
         {tab === 'trends' && (
           <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
