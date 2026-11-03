@@ -91,6 +91,54 @@ Erwartete Mitteilung, zum Beispiel: „18 Werte für 3 Tag(e) gespeichert (…)�
 Klappt etwas nicht, in der URL hinten `?dry=1` anhängen und als letzte Aktion **Ergebnis anzeigen** (Show Result) mit *Inhalte von URL* einsetzen.
 Der Server speichert dann nichts. Er zeigt nur, was er erkannt hat, und listet unter `warnings` jede Zeile, die er nicht lesen konnte. Den Text kannst du mir schicken.
 
+## Rückweg: Ernährung und Blutzucker nach Apple Health
+
+Derselbe Kurzbefehl schreibt danach deine Mahlzeiten nach Apple Health: Kalorien, Protein, Kohlenhydrate, Fett. Dazu Blutzucker, wenn du ihn als Laborwert mit Einheit mg/dL oder mmol/L erfasst hast.
+Andere Laborwerte (HbA1c, LDL, Vitamin D) und Trainings werden nicht übertragen. Apple Health hat dafür keinen passenden Messwert, Trainings zeichnet die Watch auf.
+
+Stand: Server getestet, Kurzbefehl am iPhone noch nicht durchgeklickt.
+
+Die Bausteine kommen ans Ende von **Recomp Health**, nach **Mitteilung anzeigen**.
+
+### 1. Neue Werte abholen
+
+1. **Inhalte von URL abrufen**
+   - URL: die zweite Adresse aus der App, sie endet auf `/functions/v1/health-export`
+   - Methode **POST**, Header `x-recomp-token` mit deinem Token, Anfragetext **JSON** ohne Felder
+2. **Variable festlegen**: `EX`
+
+### 2. Baustein pro Nährwert
+
+Diesen Block baust du 4-mal, dazu einmal für Blutzucker:
+
+| Schlüssel | Typ in Health | Einheit |
+|---|---|---|
+| `energy` | Nahrungsenergie (Dietary Energy) | kcal |
+| `protein` | Protein | g |
+| `carbs` | Kohlenhydrate (Carbohydrates) | g |
+| `fat` | Fett gesamt (Total Fat) | g |
+| `glucose` | Blutzucker (Blood Glucose) | mg/dL |
+
+Für `energy`:
+
+1. **Wörterbuchwert abrufen**: Wert für Schlüssel `energy` aus `EX`
+2. **Wiederholen mit jedem Objekt** (Repeat with Each) in *Wörterbuchwert*. Darin:
+   1. **Wörterbuchwert abrufen**: `value` aus *Wiederholungsobjekt*
+   2. **Wörterbuchwert abrufen**: `date` aus *Wiederholungsobjekt*
+   3. **Health-Probe protokollieren** (Log Health Sample): Typ **Nahrungsenergie**, Wert = `value`, Einheit **kcal**, Datum = `date`
+
+Ist eine Liste leer, läuft die Wiederholung einfach nicht. Das ist gewollt.
+
+### 3. Empfang bestätigen
+
+Erst jetzt gelten die Werte als übertragen. Fällt dieser Schritt aus, kommen sie beim nächsten Lauf erneut.
+
+1. **Wörterbuchwert abrufen**: `receipt` aus `EX`
+2. **Inhalte von URL abrufen**: gleiche Adresse und Header wie in Schritt 1, Anfragetext **JSON** mit Feld `confirm` (Text) = *Wörterbuchwert*
+3. Optional: **Wörterbuchwert abrufen** `summary` aus `EX` und **Mitteilung anzeigen**
+
+Hinweis: Änderst du eine Mahlzeit nach der Übertragung in der App, bleibt in Apple Health der alte Wert stehen. Korrigiere ihn dann in der Health-App.
+
 ## Automatisch auslösen
 
 **Kurzbefehle > Automation > +  > Persönliche Automation**
