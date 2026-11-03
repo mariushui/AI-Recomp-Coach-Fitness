@@ -136,11 +136,18 @@ Regeln:
 - Erfinde nichts. Fehlende Werte weglassen.
 - questions: höchstens 2 kurze Rückfragen, nur wenn eine wichtige Angabe fehlt (z. B. Dauer eines Trainings, Menge einer Proteinquelle). Sonst leer.
 - Alles, was in keine Kategorie passt, als note.
+- Foto einer Mahlzeit: Jedes erkennbare Gericht als meal. Zutaten mit geschätzter Menge in g oder ml auflisten, Tellergröße und Besteck als Maßstab nehmen.
+  Protein, kcal, Kohlenhydrate und Fett aus den geschätzten Mengen berechnen. Öl, Butter und Soßen mitschätzen, sie liefern viel Fett.
+  confidence höchstens medium, low bei verdeckten Zutaten oder unklaren Mengen. Text zum Foto hat Vorrang vor deiner Schätzung (z. B. "250 g Reis").
+  Ohne Zeitangabe im Text: occurred_at = jetzt. Ist kein Essen zu sehen, keine Einträge und eine kurze Rückfrage.
 - Antworte auf Deutsch.`;
 }
 
-export function buildUserPrompt(text: string, nowIso: string, timeZone: string): string {
-  return `Kontext: Jetzt ist ${nowIso} (Zeitzone ${timeZone}).\n\nNotiz:\n${text}`;
+export function buildUserPrompt(text: string, nowIso: string, timeZone: string, hasImage = false): string {
+  const context = `Kontext: Jetzt ist ${nowIso} (Zeitzone ${timeZone}).`;
+  if (!hasImage) return `${context}\n\nNotiz:\n${text}`;
+  const note = text.trim() ? `\n\nText zum Foto:\n${text}` : '\n\nKein Text zum Foto.';
+  return `${context}\n\nDas Foto zeigt eine Mahlzeit. Schätze Zutaten, Mengen und Makros.${note}`;
 }
 
 const hasOffset = (s: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(s);

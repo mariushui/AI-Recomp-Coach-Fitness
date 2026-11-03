@@ -5,7 +5,7 @@
 export const ENTRY_KINDS = ['meal', 'workout', 'plan', 'body', 'wellbeing', 'lab', 'note', 'health'] as const;
 export type EntryKind = (typeof ENTRY_KINDS)[number];
 
-export const ENTRY_SOURCES = ['voice', 'text', 'manual', 'health', 'import'] as const;
+export const ENTRY_SOURCES = ['voice', 'text', 'photo', 'manual', 'health', 'import'] as const;
 export type EntrySource = (typeof ENTRY_SOURCES)[number];
 
 export interface MealData {

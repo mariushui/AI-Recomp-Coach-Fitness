@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { Entry, NewEntry } from '../supabase/functions/_shared/domain';
 import type { ParseResult } from '../supabase/functions/_shared/parse';
+import type { ImageInput } from '../supabase/functions/_shared/image';
 import { localIso, timeZone } from './time';
 
 export async function listEntries(from: Date, to: Date): Promise<Entry[]> {
@@ -52,9 +53,10 @@ export async function deleteEntry(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function parseText(text: string): Promise<ParseResult> {
+/** Zerlegt Text und optional ein Essensfoto per KI in Einträge. Speichert nichts. */
+export async function parseText(text: string, image?: ImageInput | null): Promise<ParseResult> {
   const { data, error } = await supabase.functions.invoke('parse-log', {
-    body: { text, now: localIso(), tz: timeZone() },
+    body: { text, now: localIso(), tz: timeZone(), ...(image ? { image } : {}) },
   });
   if (error) {
     let msg = error.message;

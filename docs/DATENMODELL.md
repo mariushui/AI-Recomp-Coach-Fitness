@@ -10,7 +10,7 @@ Quelle der Wahrheit im Code: `supabase/functions/_shared/domain.ts`. Schema: `su
 | `user_id` | uuid | Besitzer, per RLS geschützt |
 | `kind` | text | Art des Eintrags, siehe unten |
 | `occurred_at` | timestamptz | Wann es passiert ist (nicht wann gespeichert) |
-| `source` | text | `voice`, `text`, `manual`, `health`, `import` |
+| `source` | text | `voice`, `text`, `photo`, `manual`, `health`, `import`. `photo` = von der KI aus einem Essensfoto geschätzt |
 | `data` | jsonb | Inhalt je nach Art |
 | `raw_text` | text | Original-Diktat, falls per Sprache oder Text erfasst |
 | `external_id` | text | Eindeutiger Schlüssel für Health-Sync und Import, verhindert Dubletten |
@@ -19,6 +19,7 @@ Quelle der Wahrheit im Code: `supabase/functions/_shared/domain.ts`. Schema: `su
 
 **meal** (Mahlzeit): `description`, `meal_type` (fruehstueck, mittag, abend, snack, shake), `items[]` (name, amount), `protein_g`, `kcal`, `carbs_g`, `fat_g`, `confidence` (low, medium, high).
 Makros sind KI-Schätzungen. Protein ist der wichtigste Wert.
+Aus einem Foto (Kamera oder Mediathek) schätzt die KI Zutaten, Mengen und Makros. Das Foto selbst wird nicht gespeichert, nur die bestätigten Werte mit `source = photo`.
 
 **workout** (Training): `sport` (tennis, laufen, capoeira, kraft, rad, schwimmen, mobility, sonstiges), `sport_label`, `session_type` (training, stunde, match, wettkampf, frei), `duration_min`, `rpe` (1-10).
 Technik-Sport (Tennis, Capoeira): `focus`, `high`, `low`, `result`, `opponent`.
