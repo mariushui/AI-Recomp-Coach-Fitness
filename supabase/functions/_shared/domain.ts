@@ -263,7 +263,7 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
       const sport = (SPORTS as readonly string[]).includes(raw.sport) ? (raw.sport as Sport) : 'sonstiges';
       const common = {
         sport,
-        sport_label: str(raw.sport_label),
+        sport_label: sport === 'sonstiges' ? str(raw.sport_label) : undefined,
         session_type: str(raw.session_type) as WorkoutData['session_type'],
         duration_min: num(raw.duration_min),
         rpe: num(raw.rpe),

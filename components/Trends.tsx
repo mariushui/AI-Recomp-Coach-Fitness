@@ -8,26 +8,15 @@ import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
+import { loadCharts } from '../lib/chartPrefs';
 import { addDays, dayKey, startOfDay } from '../lib/time';
 import { aggregate, buckets, granularityFor, trainingRows } from './trendData';
-import { Icons } from './icons';
 import { Card, ErrorBox } from './ui';
 
 const RANGES = [7, 30, 90, 365] as const;
 type Range = (typeof RANGES)[number];
 const RANGE_LABEL: Record<Range, string> = { 7: 'Woche', 30: '30 Tage', 90: '90 Tage', 365: 'Jahr' };
 
-const CHARTS = [
-  { key: 'body', label: 'Gewicht und Körper' },
-  { key: 'nutrition', label: 'Ernährung' },
-  { key: 'training', label: 'Training und Plan' },
-  { key: 'activity', label: 'Aktivität (Schritte, Ringe)' },
-  { key: 'heart', label: 'Herz: Ruhepuls, HRV, Cardio-Erholung' },
-  { key: 'sleep', label: 'Schlaf' },
-  { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
-  { key: 'recovery', label: 'Erholung und Belastung' },
-] as const;
-const CHART_KEY = 'recomp_trend_charts_v3';
 const RANGE_KEY = 'recomp_trend_range';
 const loadRange = (): Range => {
   try {
@@ -37,15 +26,6 @@ const loadRange = (): Range => {
     /* ignorieren */
   }
   return 30;
-};
-const loadCharts = (): Set<string> => {
-  try {
-    const raw = localStorage.getItem(CHART_KEY);
-    if (raw) return new Set(JSON.parse(raw));
-  } catch {
-    /* ignorieren */
-  }
-  return new Set(CHARTS.map((c) => c.key));
 };
 
 const SPORT_COLORS: Record<string, string> = {
@@ -69,10 +49,10 @@ const BODY: Series[] = [
   { key: 'bmi', label: 'BMI', color: '#F472B6' },
 ];
 const MACROS: (Series & { unit: string })[] = [
-  { key: 'protein', label: 'Protein', color: '#8B5CF6', unit: 'g' },
-  { key: 'carbs', label: 'Kohlenhydrate', color: '#38BDF8', unit: 'g' },
-  { key: 'fat', label: 'Fett', color: '#FBBF24', unit: 'g' },
-  { key: 'kcal', label: 'Kalorien', color: '#94A3B8', unit: 'kcal' },
+  { key: 'protein', label: 'Protein', color: '#ADFF2F', unit: 'g' },
+  { key: 'carbs', label: 'Kohlenhydrate', color: '#FBBF24', unit: 'g' },
+  { key: 'fat', label: 'Fett', color: '#FF375F', unit: 'g' },
+  { key: 'kcal', label: 'Kalorien', color: '#8B5CF6', unit: 'kcal' },
 ];
 const ACTIVITY: Series[] = [
   { key: 'steps', label: 'Schritte', color: '#64748b' },
@@ -167,8 +147,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [pre, setPre] = useState<Entry[]>([]); // 30 Tage vor dem Zeitraum, nur als Vergleichsbasis für die Erholung
   const [error, setError] = useState<string | null>(null);
-  const [charts, setCharts] = useState<Set<string>>(loadCharts);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const charts = useMemo(loadCharts, [refreshKey]);
   const [heightCm, setHeightCm] = useState<number | null>(null);
   const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null; carbs?: number | null; fat?: number | null }>({});
   const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'muscle', 'bmi']);
@@ -203,18 +182,6 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   }, [range, refreshKey]);
 
   const show = (k: string) => charts.has(k);
-  const toggleChart = (k: string) =>
-    setCharts((prev) => {
-      const n = new Set(prev);
-      if (n.has(k)) n.delete(k);
-      else n.add(k);
-      try {
-        localStorage.setItem(CHART_KEY, JSON.stringify([...n]));
-      } catch {
-        /* ignorieren */
-      }
-      return n;
-    });
 
   const data = useMemo(() => {
     const days = dailyStats(entries, from, to).map((d) => ({ ...d, bmi: bmi(d.weight, heightCm) }));
@@ -269,25 +236,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-display font-bold text-slate-100">Verlauf</h2>
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-expanded={menuOpen}
-          className="flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300"
-        >
-          <Icons.Gear size={16} /> Diagramme
-        </button>
+        <span className="text-[11px] text-slate-500">Diagramme wählst du unter Einstellungen</span>
       </div>
-      {menuOpen && (
-        <Card className="space-y-1">
-          <p className="text-xs text-slate-500 mb-1">Was soll im Verlauf erscheinen?</p>
-          {CHARTS.map((c) => (
-            <label key={c.key} className="flex items-center gap-3 py-1.5 text-sm text-slate-200">
-              <input type="checkbox" className="h-4 w-4 accent-[#8B5CF6]" checked={charts.has(c.key)} onChange={() => toggleChart(c.key)} />
-              {c.label}
-            </label>
-          ))}
-        </Card>
-      )}
       <div className="flex gap-2">
         {RANGES.map((r) => (
           <button
@@ -345,10 +295,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="g" {...axis} width={36} />
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
-            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
-            {goals.carbs && macroOn.has('carbs') && <ReferenceLine yAxisId="g" y={goals.carbs} ifOverflow="extendDomain" stroke="#38BDF8" strokeDasharray="4 4" />}
-            {goals.fat && macroOn.has('fat') && <ReferenceLine yAxisId="g" y={goals.fat} ifOverflow="extendDomain" stroke="#FBBF24" strokeDasharray="4 4" />}
-            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
+            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#ADFF2F" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#ADFF2F', fontSize: 10, position: 'insideTopLeft' }} />}
+            {goals.carbs && macroOn.has('carbs') && <ReferenceLine yAxisId="g" y={goals.carbs} ifOverflow="extendDomain" stroke="#FBBF24" strokeDasharray="4 4" />}
+            {goals.fat && macroOn.has('fat') && <ReferenceLine yAxisId="g" y={goals.fat} ifOverflow="extendDomain" stroke="#FF375F" strokeDasharray="4 4" />}
+            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopRight' }} />}
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line
                 key={m.key}

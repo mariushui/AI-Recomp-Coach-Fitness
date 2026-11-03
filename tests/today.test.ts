@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { goalColor, goalRatio, todaySummary } from '../lib/today';
+import { goalRatio, goalState, todaySummary } from '../lib/today';
 import type { Entry } from '../supabase/functions/_shared/domain';
 
 const NOW = new Date('2026-11-03T15:00:00+01:00');
@@ -57,12 +57,11 @@ describe('goalRatio', () => {
     expect(goalRatio(80, undefined)).toBeNull();
   });
 
-  it('färbt gleitend: Protein Richtung Grün, Kalorien Richtung Orange und Rot', () => {
-    expect(goalColor(50, 160, 'more')).toBe('#8B5CF6');
-    expect(goalColor(160, 160, 'more')).toBe('rgb(173,255,47)');
-    expect(goalColor(1000, 2500, 'less')).toBe('#8B5CF6');
-    expect(goalColor(2500, 2500, 'less')).toBe('rgb(255,107,0)');
-    expect(goalColor(3000, 2500, 'less')).toBe('rgb(255,55,95)');
-    expect(goalColor(100, undefined, 'less')).toBe('#8B5CF6');
+  it('meldet den Stand gegen das Ziel', () => {
+    expect(goalState(50, 160, 'more')).toBe('ok');
+    expect(goalState(160, 160, 'more')).toBe('reached');
+    expect(goalState(2400, 2500, 'less')).toBe('ok');
+    expect(goalState(2600, 2500, 'less')).toBe('over');
+    expect(goalState(100, undefined, 'less')).toBe('none');
   });
 });

@@ -66,7 +66,7 @@ supabase functions deploy health-export --no-verify-jwt
 
 Nach jeder Änderung an `supabase/functions/` die betroffene Funktion erneut deployen.
 
-Optional: `supabase secrets set GEMINI_MODEL=...`, falls du ein anderes Gemini-Modell willst. Standard ist `gemini-3.8-flash`.
+Optional: `GEMINI_MODELS=modell1,modell2,...` legt die Reihenfolge fest, in der die Function Modelle probiert (bei Überlastung kommt das nächste dran). Standard: `gemini-3.8-flash, gemini-3.7-flash, gemini-3.6-flash, gemini-3.5-flash`. `GEMINI_SCHEMA=1` schickt zusätzlich ein strenges Antwortschema mit; standardmäßig aus, weil manche Modelle damit schlechter antworten.
 
 ## 5. Lokal starten
 

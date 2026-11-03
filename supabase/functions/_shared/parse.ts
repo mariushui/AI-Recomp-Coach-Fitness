@@ -12,7 +12,18 @@ export interface ParsedEntry<K extends EntryKind = EntryKind> {
 export interface ParseResult {
   entries: ParsedEntry[];
   questions: string[];
+  model?: string; // welches Gemini-Modell geantwortet hat
+  schema?: boolean; // ob das strenge Antwortschema aktiv war
 }
+
+/** KI-Text darf nicht ausufern. Nutzereingaben bleiben unangetastet, der Deckel gilt nur hier. */
+const MAX_AI_TEXT = 400;
+const capStrings = (v: unknown): unknown => {
+  if (typeof v === 'string') return v.slice(0, MAX_AI_TEXT);
+  if (Array.isArray(v)) return v.map(capStrings);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, capStrings(x)]));
+  return v;
+};
 
 const S = (description?: string) => ({ type: 'STRING', ...(description ? { description } : {}) });
 const N = (description?: string) => ({ type: 'NUMBER', ...(description ? { description } : {}) });
@@ -144,6 +155,21 @@ Regeln:
 - Antworte auf Deutsch.`;
 }
 
+/** Beschreibung des JSON-Formats für Modelle, die ohne responseSchema laufen. Gleiche Felder wie RESPONSE_SCHEMA. */
+export function buildFormatHint(): string {
+  return `Antworte nur mit JSON, ohne Erklärung, in genau dieser Form:
+{"entries":[{"kind":"meal|workout|plan|body|wellbeing|lab|note","occurred_at":"ISO 8601 mit Offset","meal":{...}|"workout":{...}|...}],"questions":["..."]}
+Je Eintrag nur das Unterobjekt zu seiner Art. Felder:
+meal: description, meal_type (fruehstueck|mittag|abend|snack|shake|ergaenzung), items[{name,amount}], protein_g, kcal, carbs_g, fat_g, confidence (low|medium|high)
+workout: sport (${SPORTS.join('|')}), sport_label (nur bei sonstiges), session_type (training|match|stunde|frei|wettkampf), duration_min, rpe, focus, high, low, result, opponent, distance_km, avg_pace, avg_hr, exercises[{exercise,sets,reps,weight_kg,rpe}], notes
+plan: sport, sport_label (nur bei sonstiges), session_type, duration_min, rpe, focus, goal, distance_km, exercises[{exercise,sets,reps,weight_kg}], notes
+body: weight_kg, body_fat_pct, waist_cm, muscle_kg, bp_systolic, bp_diastolic
+wellbeing: energy, mood, sleep_quality, stress, soreness, soreness_areas[], joint_pain, joint_pain_areas[], focus, appetite, notes (Skalen 1-5)
+lab: name, value, unit
+note: text, tags[]
+Zahlen als Zahlen, keine Einheiten im Wert. Felder ohne Wert weglassen. Keine Kommentare, kein Fließtext in Feldern.`;
+}
+
 export function buildUserPrompt(text: string, nowIso: string, timeZone: string, hasImage = false): string {
   const context = `Kontext: Jetzt ist ${nowIso} (Zeitzone ${timeZone}).`;
   if (!hasImage) return `${context}\n\nNotiz:\n${text}`;
@@ -160,13 +186,13 @@ export function normalizeParseResult(raw: any, nowIso: string): ParseResult {
   for (const e of list) {
     const kind = e?.kind as EntryKind;
     if (!ENTRY_KINDS.includes(kind) || kind === 'health') continue;
-    const data = normalizeData(kind, e[kind]);
+    const data = normalizeData(kind, capStrings(e[kind]));
     if (!data) continue;
     const at = typeof e.occurred_at === 'string' && hasOffset(e.occurred_at) ? e.occurred_at : nowIso;
     entries.push({ kind, occurred_at: at, data });
   }
   const questions = Array.isArray(raw?.questions)
-    ? raw.questions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 2)
+    ? raw.questions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 2).map((q: string) => q.slice(0, MAX_AI_TEXT))
     : [];
   return { entries, questions };
 }
