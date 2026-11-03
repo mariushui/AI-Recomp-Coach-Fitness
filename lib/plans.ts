@@ -15,7 +15,7 @@ export interface PlanState {
 
 /** offen = Tag ist vorbei, kein passendes Training, nicht als ausgefallen markiert */
 export function matchPlans(entries: Entry[], now: Date = new Date()): PlanState[] {
-  const plans = entries.filter((e): e is Entry<'plan'> => e.kind === 'plan').sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+  const plans = entries.filter((e): e is Entry<'plan'> => e.kind === 'plan' && (e.data as PlanData).status !== 'entfernt').sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
   const workouts = entries.filter((e): e is Entry<'workout'> => e.kind === 'workout');
   const used = new Set<string>();
   const today = dayKey(now);

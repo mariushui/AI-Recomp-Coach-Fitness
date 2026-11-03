@@ -23,9 +23,12 @@ interface Props {
   onChange: (d: Draft) => void;
   onRemove?: () => void;
   defaultOpen?: boolean;
+  hideTime?: boolean; // im Wochenplan: Tag und Uhrzeit stehen außerhalb
+  header?: React.ReactNode; // ersetzt die Zeitangabe im Kopf
+  extra?: React.ReactNode; // zusätzliche Felder oben im aufgeklappten Bereich
 }
 
-const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false }) => {
+const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false, hideTime = false, header, extra }) => {
   const [open, setOpen] = useState(defaultOpen);
   const d = draft.data ?? {};
   const set = (key: string, value: unknown) => {
@@ -43,7 +46,11 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
         <span className="text-xl leading-none mt-0.5">{KIND_ICON[draft.kind]}</span>
         <span className="flex-1 min-w-0">
           <span className="block text-xs font-bold uppercase tracking-wider text-cyber-purple">
-            {KIND_LABEL[draft.kind]} · {new Date(draft.occurred_at).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+            {header ?? (
+              <>
+                {KIND_LABEL[draft.kind]} · {new Date(draft.occurred_at).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+              </>
+            )}
           </span>
           <span className="block text-sm text-slate-200 mt-0.5 break-words">
             {summarize(draft.kind, d) || <em className="text-slate-500">leer</em>}
@@ -54,6 +61,8 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
 
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+          {extra}
+          {!hideTime && (
           <label className="block">
             <Label>Zeitpunkt</Label>
             <input
@@ -63,6 +72,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
               onChange={(e) => e.target.value && onChange({ ...draft, occurred_at: fromInputValue(e.target.value) })}
             />
           </label>
+          )}
 
           {draft.kind === 'meal' && (
             <>

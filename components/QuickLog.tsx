@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { EntryKind, NewEntry } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
 import { insertEntries, parseText } from '../lib/entries';
+import { insertSlots } from '../lib/planSlotsApi';
+import { slotsFromDrafts } from '../lib/planTemplate';
+import type { PlanData } from '../supabase/functions/_shared/domain';
 import { KIND_ICON } from '../lib/format';
-import { localIso } from '../lib/time';
+import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
 import { Button, Card, ErrorBox } from './ui';
 
@@ -64,6 +67,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   const [questions, setQuestions] = useState<string[]>([]);
   const [rawText, setRawText] = useState<string | null>(null);
   const [usedVoice, setUsedVoice] = useState(false);
+  const [asTemplate, setAsTemplate] = useState(false);
   const [busy, setBusy] = useState<'parse' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -93,6 +97,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
       setDrafts((prev) => [...prev, ...r.entries.map((e) => ({ ...e }))]);
       setQuestions(r.questions);
       setRawText(text);
+      if (/(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(text)) setAsTemplate(true);
     } catch (e: any) {
       setError(`KI nicht erreichbar: ${e.message}. Der Text bleibt erhalten, du kannst ihn als Notiz speichern.`);
     } finally {
@@ -110,7 +115,13 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     setBusy('save');
     try {
       const rows: NewEntry[] = [];
+      const templatePlans: { occurred_at: string; data: PlanData }[] = [];
       for (const d of drafts) {
+        if (asTemplate && d.kind === 'plan') {
+          const data = normalizeData('plan', d.data);
+          if (data) templatePlans.push({ occurred_at: d.occurred_at, data });
+          continue;
+        }
         const data = normalizeData(d.kind, d.data);
         if (!data) continue;
         rows.push({
@@ -121,12 +132,21 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
           raw_text: d.manual ? null : rawText,
         });
       }
-      if (rows.length === 0) {
+      if (rows.length === 0 && templatePlans.length === 0) {
         setError('Keine vollständigen Einträge. Bitte Werte ergänzen.');
         return;
       }
       await insertEntries(rows);
-      setSaved(`${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} gespeichert.`);
+      await insertSlots(slotsFromDrafts(templatePlans, dayKey(new Date())));
+      setSaved(
+        [
+          rows.length && `${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} gespeichert.`,
+          templatePlans.length && `${templatePlans.length} Einheiten im Trainingsplan. Bearbeiten unter Kalender > Trainingsplan.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+      setAsTemplate(false);
       setDrafts([]);
       setQuestions([]);
       setText('');
@@ -205,6 +225,15 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
               onRemove={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}
             />
           ))}
+          {drafts.some((d) => d.kind === 'plan') && (
+            <label className="flex items-start gap-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 px-3 py-3">
+              <input type="checkbox" className="mt-1 h-4 w-4 accent-[#8B5CF6]" checked={asTemplate} onChange={(e) => setAsTemplate(e.target.checked)} />
+              <span className="text-sm text-slate-200">
+                Geplante Einheiten als festen Trainingsplan speichern
+                <span className="block text-xs text-slate-400">Dann erscheinen sie jede Woche. Sonst nur einmal an diesem Datum.</span>
+              </span>
+            </label>
+          )}
           <Button variant="green" className="w-full" onClick={saveAll} disabled={busy !== null}>
             {busy === 'save' ? 'Speichere …' : `${drafts.length} speichern`}
           </Button>

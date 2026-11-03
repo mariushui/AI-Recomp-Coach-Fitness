@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Entry, PlanData } from '../supabase/functions/_shared/domain';
+import type { Entry, PlanData, PlanSlot } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
 import { deleteEntry, insertEntries, listEntries, updateEntry } from '../lib/entries';
 import { dailyStats } from '../lib/stats';
 import { matchPlans, workoutFromPlan, type PlanState, type PlanStatus } from '../lib/plans';
 import { addDays, dayKey, formatTime, localIso, startOfDay } from '../lib/time';
 import { KIND_ICON, entryTitle, summarize } from '../lib/format';
+import { listSlots } from '../lib/planSlotsApi';
+import { expandSlots, fromSlot, isVirtual, visiblePlans } from '../lib/planTemplate';
 import EntryEditor, { type Draft } from './EntryEditor';
+import TrainingPlanView from './TrainingPlanView';
 import { Button, Card, ErrorBox } from './ui';
 
 const SPORT_COLOR: Record<string, string> = {
@@ -46,6 +49,8 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
   const [error, setError] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [slots, setSlots] = useState<PlanSlot[]>([]);
+  const [showPlan, setShowPlan] = useState(false);
 
   const ws = weekStart(day);
   const wsKey = dayKey(ws);
@@ -55,7 +60,11 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
     setLoading(true);
     setError(null);
     try {
-      setEntries(await listEntries(weekStart(new Date(wsKey)), addDays(weekStart(new Date(wsKey)), 7)));
+      const from = weekStart(new Date(wsKey));
+      const to = addDays(from, 7);
+      const [list, sl] = await Promise.all([listEntries(from, to), listSlots()]);
+      setSlots(sl);
+      setEntries(visiblePlans([...list, ...expandSlots(sl, list, from, to)]));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -98,6 +107,8 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
     setDraft({ kind: 'plan', occurred_at: localIso(at), data: { sport: 'tennis' }, manual: true });
   };
 
+  const editing = entries.find((e) => e.id === editId);
+
   const startEdit = (e: Entry) => {
     setEditId(e.id);
     setDraft({ kind: e.kind, occurred_at: e.occurred_at, data: e.data });
@@ -109,6 +120,9 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
       const data = normalizeData(draft.kind, draft.data);
       if (!data) throw new Error('Eintrag ist leer.');
       if (editId === 'new') await insertEntries([{ kind: draft.kind, occurred_at: draft.occurred_at, data, source: 'manual' }]);
+      else if (editing && isVirtual(editing))
+        // Änderung nur für diese Woche: Vorlage bleibt, dieser Tag bekommt einen eigenen Eintrag
+        await insertEntries([{ kind: 'plan', occurred_at: draft.occurred_at, data, source: 'manual', external_id: editing.external_id }]);
       else if (editId) await updateEntry(editId, { occurred_at: draft.occurred_at, data });
       setEditId(null);
       setDraft(null);
@@ -116,8 +130,16 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
 
   const remove = (id: string) =>
     run(async () => {
-      if (!confirm('Eintrag löschen?')) return;
-      await deleteEntry(id);
+      const e = entries.find((x) => x.id === id);
+      if (e?.kind === 'plan' && (isVirtual(e) || fromSlot(e))) {
+        // Aus dem Wochenplan: nur für diesen Tag streichen, sonst taucht die Einheit wieder auf
+        const data = { ...(e.data as PlanData), status: 'entfernt' as const };
+        if (isVirtual(e)) await insertEntries([{ kind: 'plan', occurred_at: e.occurred_at, data, source: 'manual', external_id: e.external_id }]);
+        else await updateEntry(e.id, { data });
+      } else {
+        if (!confirm('Eintrag löschen?')) return;
+        await deleteEntry(id);
+      }
       setEditId(null);
       setDraft(null);
     });
@@ -125,7 +147,9 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
   const markSkipped = (s: PlanState, skipped: boolean) =>
     run(async () => {
       const { status, ...rest } = s.plan.data as PlanData;
-      await updateEntry(s.plan.id, { data: skipped ? { ...rest, status: 'ausgefallen' } : rest });
+      const data = skipped ? { ...rest, status: 'ausgefallen' as const } : rest;
+      if (isVirtual(s.plan)) await insertEntries([{ kind: 'plan', occurred_at: s.plan.occurred_at, data, source: 'manual', external_id: s.plan.external_id }]);
+      else await updateEntry(s.plan.id, { data });
     });
 
   const markDone = (s: PlanState) =>
@@ -153,15 +177,41 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
         </Button>
         {editId && editId !== 'new' && (
           <Button variant="danger" onClick={() => remove(editId)}>
-            Löschen
+            {editing?.kind === 'plan' && (isVirtual(editing) || fromSlot(editing)) ? 'Diese Woche streichen' : 'Löschen'}
           </Button>
         )}
       </div>
     </div>
   );
 
+  if (showPlan)
+    return (
+      <TrainingPlanView
+        onClose={() => {
+          setShowPlan(false);
+          load();
+        }}
+        onChanged={onChanged}
+      />
+    );
+
   return (
     <div className="space-y-4">
+      <button
+        onClick={() => setShowPlan(true)}
+        className="w-full flex items-center justify-between rounded-2xl bg-cyber-purple/15 border border-cyber-purple/30 px-4 py-3 text-left"
+      >
+        <span>
+          <span className="block text-sm font-bold text-slate-100">Trainingsplan</span>
+          <span className="block text-xs text-slate-400">
+            {slots.filter((x) => !x.valid_to || x.valid_to >= dayKey(today)).length
+              ? `${slots.filter((x) => !x.valid_to || x.valid_to >= dayKey(today)).length} feste Einheiten pro Woche`
+              : 'Noch kein fester Plan. Jetzt einsprechen'}
+          </span>
+        </span>
+        <span className="text-cyber-purple text-sm font-bold">bearbeiten ›</span>
+      </button>
+
       {/* Woche */}
       <div className="flex items-center justify-between">
         <button className="h-10 w-10 rounded-full bg-white/5" onClick={() => setDay(addDays(day, -7))} aria-label="Vorwoche">
@@ -259,6 +309,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
                   <span className="flex justify-between items-center text-xs gap-2">
                     <span className="font-bold text-slate-100">
                       {entryTitle(s.plan)} · {formatTime(s.plan.occurred_at)}
+                      {fromSlot(s.plan) && <span className="ml-1.5 font-normal text-[10px] text-cyber-purple">{isVirtual(s.plan) ? 'Wochenplan' : 'Wochenplan, angepasst'}</span>}
                     </span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_LABEL[s.status].cls}`}>
                       {STATUS_LABEL[s.status].text}

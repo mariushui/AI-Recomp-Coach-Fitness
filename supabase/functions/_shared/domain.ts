@@ -73,9 +73,24 @@ export interface PlanData {
   notes?: string;
   // erledigt wird aus einem passenden Training am selben Tag abgeleitet.
   // Gespeichert wird nur, was sich nicht ableiten lässt.
-  status?: 'ausgefallen';
+  // entfernt = Einheit aus dem Wochenplan nur für diese Woche gestrichen.
+  status?: 'ausgefallen' | 'entfernt';
   skip_reason?: string;
 }
+
+/** Feste Einheit im Wochenplan. Erzeugt jede Woche eine geplante Einheit im Kalender. */
+export interface PlanSlot {
+  id: string;
+  user_id?: string;
+  weekday: number; // 1 = Montag ... 7 = Sonntag
+  time: string; // HH:MM
+  data: PlanData;
+  valid_from: string; // YYYY-MM-DD
+  valid_to?: string | null; // letzter gültiger Tag, null = offen
+  created_at?: string;
+}
+
+export const WEEKDAY_LABEL = ['', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
 
 export interface BodyData {
   weight_kg?: number;
@@ -269,7 +284,7 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         return clean<PlanData>({
           ...common,
           goal: str(raw.goal),
-          status: raw.status === 'ausgefallen' ? 'ausgefallen' : undefined,
+          status: raw.status === 'ausgefallen' || raw.status === 'entfernt' ? raw.status : undefined,
           skip_reason: str(raw.skip_reason),
         }) as any;
       }

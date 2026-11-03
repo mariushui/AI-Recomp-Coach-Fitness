@@ -30,6 +30,13 @@ Kraft: `exercises[]` mit `exercise`, `sets`, `reps`, `weight_kg`, `rpe`.
 „Erledigt“ wird nicht gespeichert, sondern abgeleitet: Ein Training derselben Sportart am selben Tag erfüllt den Plan. Jedes Training erfüllt höchstens einen Plan (`lib/plans.ts`).
 Status im Kalender: geplant (heute oder Zukunft), erledigt, nicht erfasst (Tag vorbei, kein Training), ausgefallen.
 
+## Tabelle `plan_slots` (fester Trainingsplan)
+
+Eine Zeile pro fester Einheit: `weekday` (1 = Montag bis 7 = Sonntag), `time`, `data` (PlanData), `valid_from`, `valid_to`.
+Der Kalender erzeugt daraus jede Woche geplante Einheiten (`lib/planTemplate.ts`). Sie werden nicht gespeichert.
+Wird eine Einheit nur für eine Woche geändert, gestrichen (`status: entfernt`) oder als ausgefallen markiert, entsteht ein plan-Eintrag in `entries` mit `external_id` = `slot:<slot_id>:<YYYY-MM-DD>`. Er ersetzt die Vorlage für diesen Tag.
+Änderungen am Plan gelten ab heute: Die alte Einheit endet gestern, eine neue beginnt heute. Vergangene Wochen bleiben so, wie sie geplant waren.
+
 **body** (Körperwerte, manuell): `weight_kg`, `body_fat_pct`, `waist_cm`, `bp_systolic`, `bp_diastolic`.
 
 **wellbeing** (Befinden), Skalen 1 bis 5: `energy`, `mood`, `sleep_quality`, `stress`, `soreness`, `joint_pain`, `focus`, `appetite`. Dazu `soreness_areas[]`, `joint_pain_areas[]`, `notes`.
@@ -51,4 +58,4 @@ Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 �
 
 ## Bewusst noch nicht drin
 
-Wiederkehrende Pläne (Vorlagen wie „jeden Dienstag Tennis“), Kalender-Abo für iPhone- oder Google-Kalender, Steps und aktive Kalorien (doppelte Zählung von iPhone und Watch), Workouts aus Health (kommen per Sprache), Recovery-Score (Phase 2).
+Kalender-Abo für iPhone- oder Google-Kalender, Steps und aktive Kalorien (doppelte Zählung von iPhone und Watch), Workouts aus Health (kommen per Sprache), Recovery-Score (Phase 2).

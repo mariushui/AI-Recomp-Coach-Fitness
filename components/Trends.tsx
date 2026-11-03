@@ -16,6 +16,8 @@ import { SPORTS, SPORT_LABEL, type Entry } from '../supabase/functions/_shared/d
 import { listEntries } from '../lib/entries';
 import { dailyStats, movingAverage, weeklySportMinutes } from '../lib/stats';
 import { matchPlans, weeklyPlanStats } from '../lib/plans';
+import { listSlots } from '../lib/planSlotsApi';
+import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { addDays, startOfDay } from '../lib/time';
 import { Card, ErrorBox } from './ui';
 
@@ -55,7 +57,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const from = addDays(to, -range);
 
   useEffect(() => {
-    listEntries(from, to).then(setEntries).catch((e) => setError(e.message));
+    Promise.all([listEntries(from, to), listSlots()])
+      .then(([list, slots]) => setEntries(visiblePlans([...list, ...expandSlots(slots, list, from, to)])))
+      .catch((e) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, refreshKey]);
 
