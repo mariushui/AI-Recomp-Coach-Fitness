@@ -69,10 +69,10 @@ const BODY: Series[] = [
   { key: 'bmi', label: 'BMI', color: '#F472B6' },
 ];
 const MACROS: (Series & { unit: string })[] = [
-  { key: 'protein', label: 'Protein', color: '#8B5CF6', unit: 'g' },
-  { key: 'carbs', label: 'Kohlenhydrate', color: '#38BDF8', unit: 'g' },
-  { key: 'fat', label: 'Fett', color: '#FBBF24', unit: 'g' },
-  { key: 'kcal', label: 'Kalorien', color: '#94A3B8', unit: 'kcal' },
+  { key: 'protein', label: 'Protein', color: '#ADFF2F', unit: 'g' },
+  { key: 'carbs', label: 'Kohlenhydrate', color: '#FBBF24', unit: 'g' },
+  { key: 'fat', label: 'Fett', color: '#FF375F', unit: 'g' },
+  { key: 'kcal', label: 'Kalorien', color: '#8B5CF6', unit: 'kcal' },
 ];
 const ACTIVITY: Series[] = [
   { key: 'steps', label: 'Schritte', color: '#64748b' },
@@ -345,10 +345,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="g" {...axis} width={36} />
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
-            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
-            {goals.carbs && macroOn.has('carbs') && <ReferenceLine yAxisId="g" y={goals.carbs} ifOverflow="extendDomain" stroke="#38BDF8" strokeDasharray="4 4" />}
-            {goals.fat && macroOn.has('fat') && <ReferenceLine yAxisId="g" y={goals.fat} ifOverflow="extendDomain" stroke="#FBBF24" strokeDasharray="4 4" />}
-            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
+            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#ADFF2F" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#ADFF2F', fontSize: 10, position: 'insideTopLeft' }} />}
+            {goals.carbs && macroOn.has('carbs') && <ReferenceLine yAxisId="g" y={goals.carbs} ifOverflow="extendDomain" stroke="#FBBF24" strokeDasharray="4 4" />}
+            {goals.fat && macroOn.has('fat') && <ReferenceLine yAxisId="g" y={goals.fat} ifOverflow="extendDomain" stroke="#FF375F" strokeDasharray="4 4" />}
+            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopRight' }} />}
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line
                 key={m.key}

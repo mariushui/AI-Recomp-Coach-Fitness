@@ -53,28 +53,18 @@ export function todaySummary(entries: Entry[], goals: { protein?: number | null;
   return out;
 }
 
+/** Feste Farben je Nährwert: Protein grün, Kohlenhydrate gelb, Fett rot, Kalorien lila. */
+export const MACRO_COLOR = { protein: '#ADFF2F', carbs: '#FBBF24', fat: '#FF375F', kcal: '#8B5CF6' } as const;
+
 /**
- * Farbe für den Fortschrittsbalken, gleitend.
- * more = mehr ist gut (Protein): lila, ab 80 % Richtung Grün, ab 100 % grün.
- * less = weniger ist gut (Kalorien, Fett, Kohlenhydrate): lila, ab 90 % Richtung Orange, über 100 % Richtung Rot.
+ * Stand gegen das Ziel. more = mehr ist gut (Protein), less = weniger ist gut (Kalorien, Kohlenhydrate, Fett).
+ * 'ok' = im Rahmen, 'reached' = Protein-Ziel erreicht, 'over' = Grenze überschritten, 'none' = kein Ziel.
  */
-export function goalColor(value: number | undefined, goal: number | undefined, mode: 'more' | 'less'): string {
-  const base = '#8B5CF6';
-  if (!goal) return base;
-  const r = (value ?? 0) / goal;
-  const mix = (a: [number, number, number], b: [number, number, number], t: number) => {
-    const k = Math.min(1, Math.max(0, t));
-    const c = a.map((x, i) => Math.round(x + (b[i] - x) * k));
-    return `rgb(${c[0]},${c[1]},${c[2]})`;
-  };
-  const purple: [number, number, number] = [139, 92, 246];
-  const green: [number, number, number] = [173, 255, 47];
-  const orange: [number, number, number] = [255, 107, 0];
-  const red: [number, number, number] = [255, 55, 95];
-  if (mode === 'more') return r < 0.8 ? base : mix(purple, green, (r - 0.8) / 0.2);
-  if (r < 0.9) return base;
-  if (r <= 1) return mix(purple, orange, (r - 0.9) / 0.1);
-  return mix(orange, red, (r - 1) / 0.2);
+export function goalState(value: number | undefined, goal: number | undefined, mode: 'more' | 'less'): 'none' | 'ok' | 'reached' | 'over' {
+  if (!goal) return 'none';
+  const v = value ?? 0;
+  if (mode === 'more') return v >= goal ? 'reached' : 'ok';
+  return v > goal ? 'over' : 'ok';
 }
 
 /** Anteil 0..1 am Ziel, null ohne Ziel */

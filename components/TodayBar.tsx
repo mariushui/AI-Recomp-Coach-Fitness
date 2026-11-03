@@ -5,23 +5,26 @@ import { dailyKcalTarget, loadProfile } from '../lib/profile';
 import { average } from '../lib/stats';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
-import { goalColor, goalRatio, todaySummary, type TodaySummary } from '../lib/today';
+import { MACRO_COLOR, goalRatio, goalState, todaySummary, type TodaySummary } from '../lib/today';
 import { BASELINE_DAYS, dailyRecovery, dailyStrain, recoveryLabel, strainLabel } from '../lib/recovery';
 import { dailyStats } from '../lib/stats';
 import { addDays, dayKey, startOfDay } from '../lib/time';
 
 /** Eine Zeile Ernährung: Wert, Ziel, Balken mit gleitender Farbe. */
-const MacroRow: React.FC<{ label: string; value?: number; goal?: number; unit: string; mode: 'more' | 'less' }> = ({ label, value, goal, unit, mode }) => {
+const MacroRow: React.FC<{ label: string; value?: number; goal?: number; unit: string; mode: 'more' | 'less'; color: string }> = ({ label, value, goal, unit, mode, color }) => {
   const ratio = goalRatio(value, goal);
-  const color = goalColor(value, goal, mode);
+  const state = goalState(value, goal, mode);
+  const valueColor = state === 'over' ? '#FF375F' : state === 'reached' ? '#ADFF2F' : undefined;
   return (
     <div className="grid grid-cols-[88px_1fr_auto] items-center gap-2">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">{label}</span>
+      <span className="text-[11px] font-bold uppercase tracking-wider truncate" style={{ color }}>{label}</span>
       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-        {ratio !== null && <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(ratio * 100)}%`, background: color }} />}
+        {ratio !== null && <div className="h-full rounded-full transition-all" style={{ width: `${Math.round(ratio * 100)}%`, background: color, opacity: state === 'over' ? 1 : 0.85 }} />}
       </div>
-      <span className="text-sm font-display font-bold text-slate-100 tabular-nums whitespace-nowrap">
+      <span className="text-sm font-display font-bold tabular-nums whitespace-nowrap" style={{ color: valueColor ?? '#f1f5f9' }} title={state === 'over' ? 'über dem Ziel' : state === 'reached' ? 'Ziel erreicht' : undefined}>
         {value !== undefined ? value : <span className="text-slate-600">–</span>}
+        {state === 'over' && ' ↑'}
+        {state === 'reached' && ' ✓'}
         <span className="text-[11px] font-normal text-slate-400 ml-0.5">{unit}</span>
         {goal !== undefined && <span className="text-[11px] font-normal text-slate-500"> / {goal}</span>}
       </span>
@@ -85,10 +88,10 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   return (
     <div className="space-y-2" aria-label="Heute">
       <div className="rounded-xl bg-cyber-gray border border-white/5 px-3 py-2.5 space-y-2">
-        <MacroRow label="Protein" value={s.protein} goal={s.proteinGoal} unit="g" mode="more" />
-        <MacroRow label="Kohlenhydr." value={s.carbs} goal={s.carbsGoal} unit="g" mode="less" />
-        <MacroRow label="Fett" value={s.fat} goal={s.fatGoal} unit="g" mode="less" />
-        <MacroRow label="Kalorien" value={s.kcal} goal={s.kcalGoal} unit="kcal" mode="less" />
+        <MacroRow label="Protein" value={s.protein} goal={s.proteinGoal} unit="g" mode="more" color={MACRO_COLOR.protein} />
+        <MacroRow label="Kohlenhydr." value={s.carbs} goal={s.carbsGoal} unit="g" mode="less" color={MACRO_COLOR.carbs} />
+        <MacroRow label="Fett" value={s.fat} goal={s.fatGoal} unit="g" mode="less" color={MACRO_COLOR.fat} />
+        <MacroRow label="Kalorien" value={s.kcal} goal={s.kcalGoal} unit="kcal" mode="less" color={MACRO_COLOR.kcal} />
         {kcalDynamic && <p className="text-[10px] text-slate-500 pt-0.5">Kalorienziel = Grundumsatz + aktive Kalorien heute aus Apple Health</p>}
       </div>
       <div className="grid grid-cols-2 gap-2">

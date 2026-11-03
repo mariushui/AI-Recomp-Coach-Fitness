@@ -144,6 +144,21 @@ Regeln:
 - Antworte auf Deutsch.`;
 }
 
+/** Beschreibung des JSON-Formats für Modelle, die ohne responseSchema laufen. Gleiche Felder wie RESPONSE_SCHEMA. */
+export function buildFormatHint(): string {
+  return `Antworte nur mit JSON, ohne Erklärung, in genau dieser Form:
+{"entries":[{"kind":"meal|workout|plan|body|wellbeing|lab|note","occurred_at":"ISO 8601 mit Offset","meal":{...}|"workout":{...}|...}],"questions":["..."]}
+Je Eintrag nur das Unterobjekt zu seiner Art. Felder:
+meal: description, meal_type (fruehstueck|mittag|abend|snack|shake|ergaenzung), items[{name,amount}], protein_g, kcal, carbs_g, fat_g, confidence (low|medium|high)
+workout: sport (${SPORTS.join('|')}), sport_label (nur bei sonstiges), session_type (training|match|stunde|frei|wettkampf), duration_min, rpe, focus, high, low, result, opponent, distance_km, avg_pace, avg_hr, exercises[{exercise,sets,reps,weight_kg,rpe}], notes
+plan: sport, sport_label (nur bei sonstiges), session_type, duration_min, rpe, focus, goal, distance_km, exercises[{exercise,sets,reps,weight_kg}], notes
+body: weight_kg, body_fat_pct, waist_cm, muscle_kg, bp_systolic, bp_diastolic
+wellbeing: energy, mood, sleep_quality, stress, soreness, soreness_areas[], joint_pain, joint_pain_areas[], focus, appetite, notes (Skalen 1-5)
+lab: name, value, unit
+note: text, tags[]
+Zahlen als Zahlen, keine Einheiten im Wert. Felder ohne Wert weglassen. Keine Kommentare, kein Fließtext in Feldern.`;
+}
+
 export function buildUserPrompt(text: string, nowIso: string, timeZone: string, hasImage = false): string {
   const context = `Kontext: Jetzt ist ${nowIso} (Zeitzone ${timeZone}).`;
   if (!hasImage) return `${context}\n\nNotiz:\n${text}`;

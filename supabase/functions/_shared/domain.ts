@@ -220,8 +220,9 @@ const num = (v: unknown): number | undefined => {
   return undefined;
 };
 
+const MAX_TEXT = 300;
 const str = (v: unknown): string | undefined =>
-  typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
+  typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, MAX_TEXT) : undefined;
 
 const scale = (v: unknown): number | undefined => {
   const n = num(v);
@@ -263,7 +264,7 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
       const sport = (SPORTS as readonly string[]).includes(raw.sport) ? (raw.sport as Sport) : 'sonstiges';
       const common = {
         sport,
-        sport_label: str(raw.sport_label),
+        sport_label: sport === 'sonstiges' ? str(raw.sport_label) : undefined,
         session_type: str(raw.session_type) as WorkoutData['session_type'],
         duration_min: num(raw.duration_min),
         rpe: num(raw.rpe),
