@@ -55,6 +55,7 @@ export interface WorkoutData {
   distance_km?: number;
   avg_pace?: string; // "5:30 min/km"
   avg_hr?: number;
+  kcal?: number; // aktive Kalorien, meist aus Apple Health
   exercises?: StrengthSet[];
   notes?: string;
 }
@@ -300,6 +301,7 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         opponent: str(raw.opponent),
         avg_pace: str(raw.avg_pace),
         avg_hr: num(raw.avg_hr),
+        kcal: num(raw.kcal),
       }) as any;
     }
     case 'body': {

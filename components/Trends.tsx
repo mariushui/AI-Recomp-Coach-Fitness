@@ -397,13 +397,13 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         <Chart
           title="Erholung und Belastung"
           summary={`Ø Erholung ${average(days, 'recovery' as any) ?? '–'} · Ø Belastung ${average(days, 'strain' as any) ?? '–'} pro Tag`}
-          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Belastung (0 bis 21) = Trainingsminuten mal RPE geteilt durch 60, ohne RPE gilt 5. Hohe Belastung bei niedriger Erholung ist das Muster, das du vermeiden willst."
+          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Belastung (0 bis 10, Marathon = 10) aus Trainingsminuten mal RPE, ohne RPE gilt ein Wert je Sportart. Unten steigt sie schnell, die letzten Punkte sind sehr schwer. Hohe Belastung bei niedriger Erholung ist das Muster, das du vermeiden willst."
         >
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
             <YAxis yAxisId="rec" {...axis} domain={[0, 100]} width={30} ticks={[0, 25, 50, 75, 100]} />
-            <YAxis yAxisId="strain" orientation="right" {...axis} domain={[0, 21]} width={28} ticks={[0, 7, 14, 21]} />
+            <YAxis yAxisId="strain" orientation="right" {...axis} domain={[0, 10]} width={28} ticks={[0, 2.5, 5, 7.5, 10]} />
             <Tooltip {...tooltipStyle} />
             <Bar yAxisId="strain" dataKey="strain" name="Belastung" fill="#FF6B00" fillOpacity={0.55} radius={[3, 3, 0, 0]} />
             <ReferenceLine yAxisId="rec" y={50} stroke="#334155" strokeDasharray="3 3" />

@@ -98,7 +98,7 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         <Tile label="Schlaf letzte Nacht" value={s.sleepH} unit="h" />
         <Tile label="Training heute" value={s.trainingMin} unit="min" sub={trainingSub} />
         <Tile label="Erholung" value={recovery} unit="" max={100} sub={recoveryLabel(recovery).text} color={recoveryLabel(recovery).color} />
-        <Tile label="Belastung heute" value={strain} unit="" max={21} sub={strainLabel(strain)} color="#FF6B00" />
+        <Tile label="Belastung heute" value={strain} unit="" max={10} sub={strainLabel(strain)} color="#FF6B00" />
       </div>
     </div>
   );

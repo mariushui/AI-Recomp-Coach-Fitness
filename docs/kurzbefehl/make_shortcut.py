@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Erzeugt die Kurzbefehl-Datei "Recomp Health" (Stufe 1) als unsignierte .shortcut-Datei.
+"""Erzeugt die Kurzbefehl-Datei "Recomp Health" als unsignierte .shortcut-Datei.
 
-Aufruf:  python3 make_shortcut.py TOKEN ADRESSE
-Danach auf dem Mac signieren:  shortcuts sign --mode anyone --input "Recomp Health.shortcut" --output "Recomp Health signed.shortcut"
+Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--ohne-trainings] [--nur-stufe-1]
+Danach auf dem Mac signieren:  mkdir -p signed && shortcuts sign --mode anyone --input "Recomp Health.shortcut" --output "signed/Recomp Health.shortcut"
 und per AirDrop aufs iPhone schicken.
 
-Stufe 1: Gewicht, Körperfett, Ruhepuls, HRV, Schlaf. Jeder Lauf sendet die letzten Werte, der Server
-speichert pro Kennzahl und Tag genau einen Wert und überschreibt ihn (siehe docs/KURZBEFEHL.md).
+Stufe 1: Gewicht, Körperfett, Ruhepuls, HRV, Schlaf (letzte 7 Tage).
+Stufe 2: Schritte, aktive Kalorien, Trainingsminuten (letzte 2 Tage, mit Quelle) und Trainings (letzte 7 Tage).
+Der Server speichert pro Kennzahl und Tag genau einen Wert und überschreibt ihn (siehe docs/KURZBEFEHL.md).
+
+Der Aufbau der Health-Aktionen ist aus iOS-Exporten abgelesen (docs/kurzbefehl/README.md). Für "Trainings suchen" ist die
+Kennung nicht belegt, deshalb stehen zwei Kandidaten in der Datei. Der falsche erscheint in Kurzbefehle als
+"Unbekannte Aktion" und liefert nichts, der richtige füllt "workouts" oder "workouts2". Nach dem ersten Lauf den falschen
+aus WORKOUT_CANDIDATES streichen.
 """
 import plistlib, sys, uuid
 
@@ -126,23 +132,92 @@ def sub(key, fields):
     d["WFKey"] = plain(key)
     return d
 
-token = sys.argv[1] if len(sys.argv) > 1 else "rc_HIER_DEIN_TOKEN"
-url = sys.argv[2] if len(sys.argv) > 2 else "https://DEIN-PROJEKT.supabase.co/functions/v1/health-ingest"
-metrics = dict_of([
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+flags = {a for a in sys.argv[1:] if a.startswith("--")}
+token = args[0] if len(args) > 0 else "rc_HIER_DEIN_TOKEN"
+url = args[1] if len(args) > 1 else "https://DEIN-PROJEKT.supabase.co/functions/v1/health-ingest"
+stufe2 = "--nur-stufe-1" not in flags
+mit_trainings = stufe2 and "--ohne-trainings" not in flags
+
+metric_items = [
     sub("weight", [("values", "GW"), ("dates", "GD")]),
     sub("body_fat", [("values", "KW"), ("dates", "KD")]),
     sub("resting_hr", [("values", "RW"), ("dates", "RD")]),
     sub("hrv", [("values", "HW"), ("dates", "HD")]),
     sub("sleep", [("values", "SW"), ("starts", "SS"), ("ends", "SE")]),
-])
+]
+
+def summed_block(sample_type, prefix, limit=1500, days=2):
+    """Schritte, Kalorien, Trainingsminuten: viele kleine Proben, deshalb kurzer Zeitraum. Quelle mitschicken,
+    der Server nimmt pro Tag die Quelle mit der größten Summe (iPhone und Watch zählen parallel)."""
+    f = find(sample_type, limit, days=days)
+    v = detail(f, "Value"); setvar(prefix + "W", v, "Wert")
+    d = detail(f, "Start Date"); setvar(prefix + "D", d, "Startdatum")
+    q = detail(f, "Source"); setvar(prefix + "Q", q, "Quelle")
+
+if stufe2:
+    summed_block("Steps", "T")
+    summed_block("Active Calories", "A")
+    summed_block("Exercise Minutes", "E")
+    metric_items += [
+        sub("steps", [("values", "TW"), ("dates", "TD"), ("sources", "TQ")]),
+        sub("active_kcal", [("values", "AW"), ("dates", "AD"), ("sources", "AQ")]),
+        sub("exercise_min", [("values", "EW"), ("dates", "ED"), ("sources", "EQ")]),
+    ]
+
+metrics = dict_of(metric_items)
 metrics["WFKey"] = plain("metrics")
+body_items = [metrics]
+
+# Trainings: Kennung der Such-Aktion nicht belegt, zwei Kandidaten (siehe Kopf der Datei).
+# Eigenschaften laut ActionKit (WFHKWorkoutContentItem): Activity Type, Start Date, End Date, Calories, Distance, Source.
+WORKOUT_CANDIDATES = [
+    ("workouts", "is.workflow.actions.filter.health.workout", "is.workflow.actions.properties.health.workout", "W"),
+    ("workouts2", "is.workflow.actions.filter.workouts", "is.workflow.actions.properties.workouts", "X"),
+]
+
+def workout_block(find_ident, props_ident, prefix, limit=20, days=7):
+    u = str(uuid.uuid4()).upper()
+    actions.append(action(find_ident, {
+        "WFContentItemFilter": {
+            "Value": {
+                "WFActionParameterFilterPrefix": 1,
+                "WFContentPredicateBoundedDate": False,
+                "WFActionParameterFilterTemplates": [
+                    {"Property": "Start Date", "Operator": 1001, "Bounded": True, "Removable": True, "Values": {"Number": str(days), "Unit": 16}},
+                ],
+            },
+            "WFSerializationType": "WFContentPredicateTableTemplate",
+        },
+        "WFContentItemSortProperty": "Start Date",
+        "WFContentItemSortOrder": "Latest First",
+        "WFContentItemLimitEnabled": True,
+        "WFContentItemLimitNumber": limit,
+    }, u))
+    def prop(name, var, out_name):
+        pu = str(uuid.uuid4()).upper()
+        actions.append(action(props_ident, {"WFContentItemPropertyName": name, "WFInput": ref(u, "Workouts")}, pu))
+        setvar(prefix + var, pu, out_name)
+    prop("Activity Type", "T", "Aktivitätstyp")
+    prop("Start Date", "S", "Startdatum")
+    prop("End Date", "E", "Enddatum")
+    prop("Calories", "K", "Kalorien")
+    prop("Distance", "M", "Distanz")
+    prop("Source", "Q", "Quelle")
+
+if mit_trainings:
+    for key, find_ident, props_ident, prefix in WORKOUT_CANDIDATES:
+        workout_block(find_ident, props_ident, prefix)
+        block = sub(key, [("types", prefix + "T"), ("starts", prefix + "S"), ("ends", prefix + "E"), ("kcal", prefix + "K"), ("distances", prefix + "M"), ("sources", prefix + "Q")])
+        body_items.append(block)
+
 dl = str(uuid.uuid4()).upper()
 actions.append(action("is.workflow.actions.downloadurl", {
     "WFURL": url,
     "WFHTTPMethod": "POST",
     "WFHTTPBodyType": "JSON",
     "WFHTTPHeaders": {"Value": {"WFDictionaryFieldValueItems": [dict_field("x-recomp-token", plain(token))]}, "WFSerializationType": "WFDictionaryFieldValue"},
-    "WFJSONValues": {"Value": {"WFDictionaryFieldValueItems": [metrics]}, "WFSerializationType": "WFDictionaryFieldValue"},
+    "WFJSONValues": {"Value": {"WFDictionaryFieldValueItems": body_items}, "WFSerializationType": "WFDictionaryFieldValue"},
     "ShowHeaders": True,
 }, dl))
 gv = str(uuid.uuid4()).upper()

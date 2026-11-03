@@ -36,8 +36,12 @@ Abgelesen aus einem Kurzbefehl, den iOS selbst gespeichert hat (iCloud-Link, Dow
 - „Datum formatieren“ liefert bei einer Liste von Daten nichts. Die Datei übergibt die Daten roh, der Server liest das Format von Kurzbefehle („03.11.2026, 07:12“) in Berliner Zeit.
 - „Wörterbuchwert abrufen“ erwartet den Schlüssel in `WFDictionaryKey`.
 
-## Was Stufe 1 enthält
+## Was die Datei enthält
 
-Gewicht, Körperfett, Ruhepuls, HRV (je die letzten 10 bzw. 40 Werte) und Schlaf (letzte 80 Abschnitte).
-Der Server fasst pro Kennzahl und Tag zusammen und überschreibt bei erneutem Senden. Stufe 2 (Schritte, Ringe, Blutsauerstoff,
-Cardio-Erholung, VO2max) und Stufe 3 (Rückweg Ernährung) stehen in `docs/KURZBEFEHL.md` und kommen in die Datei, sobald Stufe 1 läuft.
+- Stufe 1: Gewicht, Körperfett, Ruhepuls, HRV (je die letzten 10 bzw. 40 Werte der letzten 7 Tage) und Schlaf (letzte 80 Abschnitte). Geprüft am iPhone.
+- Stufe 2a: Schritte, aktive Kalorien, Trainingsminuten der letzten 2 Tage mit Quelle (bis 1.500 Proben je Kennzahl). Typnamen `Steps`, `Active Calories`, `Exercise Minutes` laut Shortcuts-Referenz, am iPhone noch nicht geprüft.
+- Stufe 2b: Trainings der letzten 7 Tage (Aktivität, Start, Ende, Kalorien, Distanz, Quelle). Die Kennung der Aktion „Trainings suchen“ ist nicht belegt, deshalb stehen zwei Kandidaten in der Datei (`WORKOUT_CANDIDATES`). Der falsche zeigt sich in Kurzbefehle als „Unbekannte Aktion“ und liefert leere Felder, der richtige füllt `workouts` oder `workouts2`. Nach dem ersten Lauf steht im Server-Log, welcher es war, dann fliegt der andere raus.
+
+Schalter: `--ohne-trainings` lässt Stufe 2b weg, `--nur-stufe-1` baut die geprüfte Version mit 30 Aktionen.
+
+Der Server fasst pro Kennzahl und Tag zusammen und überschreibt bei erneutem Senden. Trainings werden mit diktierten Trainings am selben Tag zusammengeführt (siehe `docs/DATENMODELL.md`). Stufe 3 (Blutsauerstoff, Cardio-Erholung, VO2max, Rückweg Ernährung) steht in `docs/KURZBEFEHL.md`.

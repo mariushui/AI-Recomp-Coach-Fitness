@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dailyRecovery, dailyStrain, recoveryAt, recoveryLabel, strainLabel } from '../lib/recovery';
+import { dailyRecovery, dailyStrain, recoveryAt, recoveryLabel, strainFromLoad, strainLabel } from '../lib/recovery';
 import type { DayStats } from '../lib/stats';
 import type { Entry } from '../supabase/functions/_shared/domain';
 
@@ -34,24 +34,35 @@ describe('recoveryAt', () => {
 
 describe('dailyStrain', () => {
   const e = (at: string, data: any): Entry => ({ id: at, user_id: 'u', kind: 'workout', occurred_at: at, source: 'manual', data }) as Entry;
-  it('rechnet Minuten x RPE / 60, ohne RPE gilt 5, Deckel 21', () => {
-    const days = [day(0), day(1), day(2)];
+  it('Skala 0 bis 10: Mitteldistanz-Triathlon 9,3, Tennistag 6,5 bis 7,5, lockerer Lauf um 3,5', () => {
+    const days = [day(0), day(1, { exerciseMin: 190 }), day(2)];
     const strain = dailyStrain(
       [
-        e('2026-10-01T18:00:00+02:00', { sport: 'tennis', duration_min: 90, rpe: 7 }),
-        e('2026-10-02T08:00:00+02:00', { sport: 'laufen', duration_min: 60 }),
-        e('2026-10-02T18:00:00+02:00', { sport: 'kraft', duration_min: 120, rpe: 9 }),
+        e('2026-10-01T08:00:00+02:00', { sport: 'sonstiges', sport_label: 'Triathlon', duration_min: 330, rpe: 7.5 }),
+        e('2026-10-02T10:00:00+02:00', { sport: 'tennis', duration_min: 120 }),
+        e('2026-10-02T09:00:00+02:00', { sport: 'rad', duration_min: 40, rpe: 4 }),
+        e('2026-10-03T08:00:00+02:00', { sport: 'laufen', duration_min: 60, rpe: 5 }),
       ],
       days,
     );
-    expect(strain.get('2026-10-01')).toBe(10.5);
-    expect(strain.get('2026-10-02')).toBe(21);
-    expect(strain.has('2026-10-03')).toBe(false);
+    expect(strain.get('2026-10-01')).toBe(9.3);
+    const tennisDay = strain.get('2026-10-02')!; // Tennis 120x6 + Rad 40x4 + 30 min Alltag x4 = 1000
+    expect(tennisDay).toBeGreaterThanOrEqual(6.5);
+    expect(tennisDay).toBeLessThanOrEqual(7.5);
+    expect(strain.get('2026-10-03')).toBe(2.8);
+    expect(strainFromLoad(42.195 * 6 * 7.5)).toBeGreaterThan(8.5); // Marathon mit RPE 7,5 bei 6 min/km
   });
 
-  it('nimmt Apple-Health-Trainingsminuten, wenn kein eigenes Training da ist', () => {
-    const strain = dailyStrain([], [day(0, { exerciseMin: 48 })]);
-    expect(strain.get('2026-10-01')).toBe(4);
+  it('ohne RPE gilt ein Standard je Sportart, Deckel bleibt unter 10', () => {
+    const strain = dailyStrain([e('2026-10-01T18:00:00+02:00', { sport: 'laufen', duration_min: 60 })], [day(0)]);
+    expect(strain.get('2026-10-01')).toBe(3.6);
+    expect(strainFromLoad(100000)).toBe(10);
+  });
+
+  it('nimmt Apple-Trainingsminuten, die kein Training abdeckt, mit RPE 4 dazu', () => {
+    expect(dailyStrain([], [day(0, { exerciseMin: 48 })]).get('2026-10-01')).toBe(1.9);
+    const strain = dailyStrain([e('2026-10-01T18:00:00+02:00', { sport: 'tennis', duration_min: 60, rpe: 6 })], [day(0, { exerciseMin: 60 })]);
+    expect(strain.get('2026-10-01')).toBe(3.2); // nur das Training zählt, die Minuten sind abgedeckt
   });
 });
 
@@ -61,8 +72,9 @@ describe('Labels', () => {
     expect(recoveryLabel(50).text).toBe('mittel');
     expect(recoveryLabel(10).text).toBe('wenig erholt');
     expect(recoveryLabel(undefined).text).toContain('Vergleichswerte');
-    expect(strainLabel(3)).toBe('leicht');
-    expect(strainLabel(10)).toBe('moderat');
-    expect(strainLabel(18)).toBe('hoch');
+    expect(strainLabel(2)).toBe('leicht');
+    expect(strainLabel(5)).toBe('moderat');
+    expect(strainLabel(7)).toBe('hoch');
+    expect(strainLabel(9.3)).toBe('sehr hoch');
   });
 });
