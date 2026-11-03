@@ -17,6 +17,10 @@ Frühere Lösungen mit Auto-Export und Push waren bei dir instabil. Die häufigs
 | Fehler bleiben unbemerkt | Der Kurzbefehl zeigt nach jedem Lauf eine Mitteilung mit dem Ergebnis. Die App zeigt unter **Einstellungen** den letzten Empfang |
 | Schlaf doppelt gezählt (Watch und Schlaf-App) | Der Server zählt überlappende Zeiten nur einmal |
 
+## Abkürzung: fertige Datei
+
+Statt alles von Hand zu bauen: `docs/kurzbefehl/make_shortcut.py` erzeugt den Kurzbefehl als Datei, die du auf dem Mac signierst und per AirDrop aufs iPhone schickst. Anleitung in `docs/kurzbefehl/README.md`. Die Bauanleitung unten bleibt der Weg, wenn der Import nicht klappt.
+
 ## Vorbereitung
 
 1. In der App **Einstellungen > Apple Health > Token erstellen**. Token kopieren und in einer Notiz zwischenspeichern.
