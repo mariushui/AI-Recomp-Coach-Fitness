@@ -45,6 +45,10 @@ export function summarize(kind: EntryKind, data: any): string {
   switch (kind) {
     case 'meal': {
       const m = data as MealData;
+      if (m.meal_type === 'ergaenzung') {
+        const items = m.items?.map((i) => (i.amount ? `${i.name} ${i.amount}` : i.name)).join(', ');
+        return j([items || m.description, m.protein_g !== undefined && `${m.protein_g} g Protein`]);
+      }
       return j([m.description, m.protein_g !== undefined && `${m.protein_g} g Protein`, m.kcal !== undefined && `${m.kcal} kcal`]);
     }
     case 'workout': {
@@ -77,6 +81,7 @@ export function summarize(kind: EntryKind, data: any): string {
         b.weight_kg !== undefined && `${b.weight_kg} kg`,
         b.body_fat_pct !== undefined && `${b.body_fat_pct} % KFA`,
         b.waist_cm !== undefined && `Taille ${b.waist_cm} cm`,
+        b.muscle_kg !== undefined && `Muskeln ${b.muscle_kg} kg`,
         b.bp_systolic !== undefined && `RR ${b.bp_systolic}/${b.bp_diastolic ?? '?'}`,
       ]);
     }
@@ -111,6 +116,7 @@ export function summarize(kind: EntryKind, data: any): string {
 }
 
 export function entryTitle(e: Pick<Entry, 'kind' | 'data'>): string {
+  if (e.kind === 'meal' && (e.data as MealData).meal_type === 'ergaenzung') return 'Ergänzung';
   if (e.kind === 'workout' || e.kind === 'plan') {
     const w = e.data as WorkoutData;
     return w.sport === 'sonstiges' ? w.sport_label ?? 'Training' : SPORT_LABEL[w.sport];

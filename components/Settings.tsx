@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
-import { loadProfile, saveProfile, suggestedProteinGoal } from '../lib/profile';
+import { ageFrom, loadProfile, saveProfile, suggestedKcalGoal, suggestedProteinGoal } from '../lib/profile';
 import { listEntries } from '../lib/entries';
-import { dailyStats } from '../lib/stats';
+import { average, dailyStats } from '../lib/stats';
 import { addDays } from '../lib/time';
 import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
-import { Button, Card, ErrorBox, NumberField, TextField } from './ui';
+import { Button, Card, ErrorBox, Label, NumberField, TextField } from './ui';
 
 const GUIDE_URL = 'https://github.com/mariushui/AI-Recomp-Coach-Fitness/blob/main/docs/KURZBEFEHL.md';
 export const SHORTCUT_NAME = 'Recomp Health';
@@ -24,7 +24,9 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [height, setHeight] = useState<number | undefined>();
   const [proteinGoal, setProteinGoal] = useState<number | undefined>();
   const [kcalGoal, setKcalGoal] = useState<number | undefined>();
-  const [lastWeight, setLastWeight] = useState<number | undefined>();
+  const [leanMass, setLeanMass] = useState<number | undefined>();
+  const [activeKcal, setActiveKcal] = useState<number | undefined>();
+  const [birthDate, setBirthDate] = useState<string | undefined>();
   const [token, setToken] = useState<string | null>(null);
   const [lastUsed, setLastUsed] = useState<string | null | undefined>();
   const [legacyJson, setLegacyJson] = useState<string | undefined>();
@@ -39,13 +41,16 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         setHeight(p.height_cm ?? undefined);
         setProteinGoal(p.protein_goal_g ?? undefined);
         setKcalGoal(p.kcal_goal ?? undefined);
+        setBirthDate(p.birth_date ?? undefined);
       })
       .catch(() => undefined);
     const now = new Date();
     listEntries(addDays(now, -30), addDays(now, 1))
       .then((list) => {
-        const w = dailyStats(list, addDays(now, -30), addDays(now, 1)).map((d) => d.weight).filter((x): x is number => typeof x === 'number');
-        setLastWeight(w.length ? w[w.length - 1] : undefined);
+        const days = dailyStats(list, addDays(now, -30), addDays(now, 1));
+        const lm = days.map((d) => d.leanMass).filter((x): x is number => typeof x === 'number');
+        setLeanMass(lm.length ? lm[lm.length - 1] : undefined);
+        setActiveKcal(average(days.slice(-14), 'activeKcal'));
       })
       .catch(() => undefined);
     supabase
@@ -89,11 +94,13 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       if (p !== null && (p < 30 || p > 400)) throw new Error('Protein-Ziel bitte zwischen 30 und 400 g.');
       if (k !== null && (k < 800 || k > 6000)) throw new Error('Kalorien-Ziel bitte zwischen 800 und 6.000 kcal.');
       if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
+      if (birthDate && ageFrom(birthDate) === undefined) throw new Error('Geburtsdatum bitte prüfen.');
       await saveProfile(session.user.id, {
         display_name: name ?? null,
         height_cm: height ?? null,
         protein_goal_g: p,
         kcal_goal: k,
+        birth_date: birthDate ?? null,
       });
       setProteinGoal(p ?? undefined);
       setKcalGoal(k ?? undefined);
@@ -163,7 +170,18 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         <p className="text-sm text-slate-400">{session.user.email}</p>
         <TextField label="Name" value={name} onChange={setName} />
         <NumberField label="Körpergröße" unit="cm" value={height} onChange={setHeight} />
-        <p className="text-xs text-slate-500">Wird nur für den BMI im Verlauf gebraucht.</p>
+        <label className="block">
+          <Label>Geburtsdatum</Label>
+          <input
+            type="date"
+            className="w-full rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-base text-slate-100"
+            value={birthDate ?? ''}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setBirthDate(e.target.value || undefined)}
+          />
+          {ageFrom(birthDate) !== undefined && <span className="block text-xs text-slate-500 mt-1">{ageFrom(birthDate)} Jahre. Für Maximalpuls und Belastungszonen.</span>}
+        </label>
+        <p className="text-xs text-slate-500">Größe für den BMI, Geburtsdatum für Alter und Maximalpuls. Beides bleibt privat in deinem Profil.</p>
         <Button variant="ghost" onClick={saveName}>
           Speichern
         </Button>
@@ -175,10 +193,21 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
           <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
           <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />
         </div>
-        {suggestedProteinGoal(lastWeight) !== undefined && proteinGoal !== suggestedProteinGoal(lastWeight) && (
-          <button type="button" className="text-xs text-cyber-purple underline" onClick={() => setProteinGoal(suggestedProteinGoal(lastWeight))}>
-            Vorschlag für Recomposition: {suggestedProteinGoal(lastWeight)} g (2 g pro kg bei {lastWeight} kg)
-          </button>
+        {leanMass === undefined ? (
+          <p className="text-xs text-slate-500">Vorschläge gibt es, sobald Gewicht und Körperfett erfasst sind (Waage oder Apple Health).</p>
+        ) : (
+          <div className="space-y-1">
+            {proteinGoal !== suggestedProteinGoal(leanMass) && (
+              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setProteinGoal(suggestedProteinGoal(leanMass))}>
+                Vorschlag Protein: {suggestedProteinGoal(leanMass)} g (2 g je kg fettfreie Masse, {leanMass} kg)
+              </button>
+            )}
+            {kcalGoal !== suggestedKcalGoal(leanMass, activeKcal) && (
+              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setKcalGoal(suggestedKcalGoal(leanMass, activeKcal))}>
+                Vorschlag Kalorien: {suggestedKcalGoal(leanMass, activeKcal)} kcal (Verbrauch: Grundumsatz{activeKcal ? ` + Ø ${activeKcal} kcal aktiv` : ''})
+              </button>
+            )}
+          </div>
         )}
         <Button variant="ghost" onClick={saveName}>
           Speichern

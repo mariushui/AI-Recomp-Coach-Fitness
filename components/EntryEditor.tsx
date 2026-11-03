@@ -91,6 +91,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
                   { value: 'abend', label: 'Abend' },
                   { value: 'snack', label: 'Snack' },
                   { value: 'shake', label: 'Shake' },
+                  { value: 'ergaenzung', label: 'Ergänzung' },
                 ]}
               />
               <div className="grid grid-cols-2 gap-3">
@@ -176,6 +177,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
               <NumberField label="Gewicht" unit="kg" step={0.1} value={d.weight_kg} onChange={(v) => set('weight_kg', v)} />
               <NumberField label="Körperfett" unit="%" step={0.1} value={d.body_fat_pct} onChange={(v) => set('body_fat_pct', v)} />
               <NumberField label="Taille" unit="cm" step={0.5} value={d.waist_cm} onChange={(v) => set('waist_cm', v)} />
+              <NumberField label="Muskeln (Waage)" unit="kg" step={0.1} value={d.muscle_kg} onChange={(v) => set('muscle_kg', v)} />
               <div />
               <NumberField label="Blutdruck sys." value={d.bp_systolic} onChange={(v) => set('bp_systolic', v)} />
               <NumberField label="Blutdruck dia." value={d.bp_diastolic} onChange={(v) => set('bp_diastolic', v)} />

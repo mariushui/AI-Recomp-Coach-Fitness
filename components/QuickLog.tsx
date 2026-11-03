@@ -20,7 +20,7 @@ const QUICK_ADD: { kind: EntryKind; label: string; data: any }[] = [
   { kind: 'plan', label: 'Plan', data: { sport: 'tennis' } },
   { kind: 'body', label: 'Gewicht', data: {} },
   { kind: 'wellbeing', label: 'Befinden', data: {} },
-  { kind: 'lab', label: 'Blutwerte', data: {} },
+  { kind: 'meal', label: 'Ergänzung', data: { meal_type: 'ergaenzung' } },
 ];
 
 const EXAMPLES = [
@@ -290,7 +290,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
         <div className="grid grid-cols-3 gap-2">
           {QUICK_ADD.map((q) => (
             <button
-              key={q.kind}
+              key={q.label}
               type="button"
               onClick={() => setDrafts((prev) => [...prev, { kind: q.kind, occurred_at: localIso(), data: { ...q.data }, manual: true }])}
               className="rounded-xl bg-cyber-gray border border-white/5 py-3 text-sm text-slate-200"

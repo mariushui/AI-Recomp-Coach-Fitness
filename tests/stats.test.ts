@@ -48,7 +48,7 @@ describe('weeklySportMinutes', () => {
   });
 });
 
-describe('Makros, Magermasse, Wochenmittel', () => {
+describe('Makros, fettfreie Masse, Wochenmittel', () => {
   const entries = [
     e('body', '2026-11-02T07:00:00+01:00', { weight_kg: 82, body_fat_pct: 18 }),
     e('meal', '2026-11-02T08:00:00+01:00', { description: 'a', protein_g: 40, carbs_g: 80.4, fat_g: 20 }),
@@ -61,7 +61,7 @@ describe('Makros, Magermasse, Wochenmittel', () => {
     expect(s[0].carbs).toBe(180);
     expect(s[0].fat).toBe(45);
   });
-  it('berechnet magere Körpermasse', () => expect(s[0].leanMass).toBe(67.2));
+  it('berechnet fettfreie Masse', () => expect(s[0].leanMass).toBe(67.2));
   it('Wochenmittel nur über Tage mit Wert', () => {
     expect(weeklyAverages(s, ['protein', 'carbs'])).toEqual([
       { week: '2026-11-02', protein: 100, carbs: 180 },

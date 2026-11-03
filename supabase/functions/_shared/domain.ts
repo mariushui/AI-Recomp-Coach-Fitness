@@ -10,7 +10,7 @@ export type EntrySource = (typeof ENTRY_SOURCES)[number];
 
 export interface MealData {
   description: string;
-  meal_type?: 'fruehstueck' | 'mittag' | 'abend' | 'snack' | 'shake';
+  meal_type?: 'fruehstueck' | 'mittag' | 'abend' | 'snack' | 'shake' | 'ergaenzung'; // ergaenzung = Kreatin, Vitamine, Omega-3 usw.
   items?: { name: string; amount?: string }[];
   protein_g?: number;
   kcal?: number;
@@ -96,6 +96,7 @@ export interface BodyData {
   weight_kg?: number;
   body_fat_pct?: number;
   waist_cm?: number;
+  muscle_kg?: number; // Muskelmasse laut Waage (Skelettmuskulatur), nicht die fettfreie Masse
   bp_systolic?: number;
   bp_diastolic?: number;
 }
@@ -306,6 +307,7 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         weight_kg: num(raw.weight_kg),
         body_fat_pct: num(raw.body_fat_pct),
         waist_cm: num(raw.waist_cm),
+        muscle_kg: num(raw.muscle_kg),
         bp_systolic: num(raw.bp_systolic),
         bp_diastolic: num(raw.bp_diastolic),
       });
