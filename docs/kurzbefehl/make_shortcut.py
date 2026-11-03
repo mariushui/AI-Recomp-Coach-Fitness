@@ -42,10 +42,34 @@ def ref(out_uuid, name):
 
 actions = []
 
-def find(sample_type, limit):
+def find(sample_type, limit, days=7):
+    """Health-Messungen suchen. Aufbau wie von iOS selbst gespeichert (aus einem iCloud-Export abgelesen):
+    Typ und Zeitraum sind Filterbedingungen, kein eigenes Feld."""
     u = str(uuid.uuid4()).upper()
     actions.append(action("is.workflow.actions.filter.health.quantity", {
-        "WFHealthSampleType": sample_type,
+        "WFContentItemFilter": {
+            "Value": {
+                "WFActionParameterFilterPrefix": 1,
+                "WFContentPredicateBoundedDate": False,
+                "WFActionParameterFilterTemplates": [
+                    {
+                        "Property": "Type",
+                        "Operator": 4,
+                        "Bounded": True,
+                        "Removable": False,
+                        "Values": {"Enumeration": {"Value": sample_type, "WFSerializationType": "WFStringSubstitutableState"}},
+                    },
+                    {
+                        "Property": "Start Date",
+                        "Operator": 1001,  # ist innerhalb der letzten
+                        "Bounded": True,
+                        "Removable": False,
+                        "Values": {"Number": str(days), "Unit": 16},  # 16 = Tage
+                    },
+                ],
+            },
+            "WFSerializationType": "WFContentPredicateTableTemplate",
+        },
         "WFContentItemSortProperty": "Start Date",
         "WFContentItemSortOrder": "Latest First",
         "WFContentItemLimitEnabled": True,
@@ -57,29 +81,38 @@ def detail(find_uuid, prop):
     u = str(uuid.uuid4()).upper()
     actions.append(action("is.workflow.actions.properties.health.quantity", {
         "WFContentItemPropertyName": prop,
-        "WFInput": ref(find_uuid, "Health Samples"),
+        "WFInput": ref(find_uuid, "Health-Messungen"),
     }, u))
     return u
 
-def fmt_date():
-    actions.append(action("is.workflow.actions.format.date", {"WFDateFormatStyle": "ISO 8601", "WFISO8601IncludeTime": True}))
+def fmt_date(src_uuid, src_name):
+    u = str(uuid.uuid4()).upper()
+    actions.append(action("is.workflow.actions.format.date", {
+        "WFDate": ref(src_uuid, src_name),
+        "WFDateFormatStyle": "ISO 8601",
+        "WFISO8601IncludeTime": True,
+    }, u))
+    return u
 
-def setvar(name):
-    actions.append(action("is.workflow.actions.setvariable", {"WFVariableName": name}))
+def setvar(name, src_uuid, src_name):
+    actions.append(action("is.workflow.actions.setvariable", {
+        "WFVariableName": name,
+        "WFInput": ref(src_uuid, src_name),
+    }))
 
 def point_block(sample_type, value_var, date_var, limit=10):
     f = find(sample_type, limit)
-    detail(f, "Value"); setvar(value_var)
-    detail(f, "Start Date"); fmt_date(); setvar(date_var)
+    v = detail(f, "Value"); setvar(value_var, v, "Wert")
+    d = detail(f, "Start Date"); fd = fmt_date(d, "Startdatum"); setvar(date_var, fd, "Formatiertes Datum")
 
 point_block("Weight", "GW", "GD")
 point_block("Body Fat Percentage", "KW", "KD")
 point_block("Resting Heart Rate", "RW", "RD")
 point_block("Heart Rate Variability", "HW", "HD", limit=40)
 f = find("Sleep Analysis", 80)
-detail(f, "Value"); setvar("SW")
-detail(f, "Start Date"); fmt_date(); setvar("SS")
-detail(f, "End Date"); fmt_date(); setvar("SE")
+v = detail(f, "Value"); setvar("SW", v, "Wert")
+d = detail(f, "Start Date"); fd = fmt_date(d, "Startdatum"); setvar("SS", fd, "Formatiertes Datum")
+d = detail(f, "End Date"); fd = fmt_date(d, "Enddatum"); setvar("SE", fd, "Formatiertes Datum")
 
 def dict_field(key, value):
     return {"WFItemType": 0, "WFKey": plain(key), "WFValue": value}
