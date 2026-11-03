@@ -90,7 +90,7 @@ App läuft auf `http://localhost:3000`.
 
 ## 7. Apple Health verbinden
 
-In der App unter **Mehr > Apple Health** einen Token erzeugen. Dann `docs/KURZBEFEHL.md` folgen.
+In der App unter **Einstellungen > Apple Health** einen Token erzeugen. Dann `docs/KURZBEFEHL.md` folgen.
 
 ## 8. Alte Daten übernehmen
 
@@ -101,7 +101,7 @@ So holst du sie: In der alten App am Mac die Entwicklerkonsole öffnen (Safari: 
 copy(localStorage.getItem('ai_fitness_coach_history_v2'))
 ```
 
-Dann in der neuen App unter **Mehr > Alte Daten übernehmen** einfügen. Doppelte Einträge werden übersprungen.
+Dann in der neuen App unter **Einstellungen > Alte Daten übernehmen** einfügen. Doppelte Einträge werden übersprungen.
 
 ## Freunde einladen
 

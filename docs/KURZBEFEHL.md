@@ -14,12 +14,12 @@ Frühere Lösungen mit Auto-Export und Push waren bei dir instabil. Die häufigs
 | iPhone gesperrt, Health-Daten sind dann verschlüsselt und der Lauf scheitert still | Auslöser ist das Entsperren beim Öffnen einer App, nicht eine feste Uhrzeit |
 | Ein Lauf fällt aus und der Tag fehlt für immer | Jeder Lauf sendet die letzten 3 Tage. Der nächste Lauf holt Lücken nach |
 | Doppelte Werte durch mehrfaches Senden | Der Server speichert pro Kennzahl und Tag genau einen Wert und überschreibt ihn |
-| Fehler bleiben unbemerkt | Der Kurzbefehl zeigt nach jedem Lauf eine Mitteilung mit dem Ergebnis. Die App zeigt unter **Mehr** den letzten Empfang |
+| Fehler bleiben unbemerkt | Der Kurzbefehl zeigt nach jedem Lauf eine Mitteilung mit dem Ergebnis. Die App zeigt unter **Einstellungen** den letzten Empfang |
 | Schlaf doppelt gezählt (Watch und Schlaf-App) | Der Server zählt überlappende Zeiten nur einmal |
 
 ## Vorbereitung
 
-1. In der App **Mehr > Apple Health > Token erstellen**. Token kopieren und in einer Notiz zwischenspeichern.
+1. In der App **Einstellungen > Apple Health > Token erstellen**. Token kopieren und in einer Notiz zwischenspeichern.
 2. Ebenda die **Adresse** kopieren. Sie endet auf `/functions/v1/health-ingest`.
 
 ## Kurzbefehl bauen
@@ -179,7 +179,7 @@ Hinweis: Änderst du eine Mahlzeit nach der Übertragung in der App, bleibt in A
 
 Mehrfaches Laufen am Tag schadet nicht.
 
-**Von Hand**: In der App unter **Mehr** gibt es **Jetzt syncen**. Das startet den Kurzbefehl direkt.
+**Von Hand**: In der App unter **Einstellungen** gibt es **Jetzt syncen**. Das startet den Kurzbefehl direkt.
 
 ## Für Freunde
 
