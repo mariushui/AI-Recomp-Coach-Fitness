@@ -132,6 +132,7 @@ export const HEALTH_METRICS = [
   'resting_hr',
   'hrv',
   'vo2max',
+  'spo2',
   'steps',
   'active_kcal',
   'sleep',

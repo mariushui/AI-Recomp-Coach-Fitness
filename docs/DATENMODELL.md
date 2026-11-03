@@ -47,7 +47,7 @@ Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 �
 
 **note**: `text`, `tags[]`.
 
-**health** (aus Apple Health, ein Eintrag pro Kennzahl und Tag): `metric` (weight, body_fat, resting_hr, hrv, vo2max, sleep), `value`, `unit`, bei Schlaf `stages` in Minuten.
+**health** (aus Apple Health, ein Eintrag pro Kennzahl und Tag): `metric` (weight, body_fat, resting_hr, hrv, vo2max, spo2, steps, sleep), `value`, `unit`, bei Schlaf `stages` in Minuten.
 `external_id` = `<metric>:<YYYY-MM-DD>`. Ein neuer Sync überschreibt den Tageswert.
 
 ## Regeln für Tageswerte (Auswertung)
@@ -55,8 +55,10 @@ Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 �
 - Gewicht und KFA: manueller Eintrag schlägt Apple Health. Bei Health zählt die erste Messung des Tages.
 - HRV: Mittelwert des Tages. Ruhepuls und VO2max: letzter Wert.
 - Schlaf: zählt zur Nacht, in der er endet. Überlappende Quellen (Watch und App) werden nicht doppelt gezählt.
+- Schritte: pro Tag die Quelle mit den meisten Schritten, damit iPhone und Watch nicht doppelt zählen. Blutsauerstoff: Tagesmittel in Prozent.
+- Magere Körpermasse = Gewicht x (1 - KFA), nur an Tagen mit beiden Werten.
 - Gewicht wird als 7-Tage-Schnitt gezeigt, weil Tageswerte um 1 bis 2 kg schwanken.
 
 ## Bewusst noch nicht drin
 
-Kalender-Abo für iPhone- oder Google-Kalender, Steps und aktive Kalorien (doppelte Zählung von iPhone und Watch), Workouts aus Health (kommen per Sprache), Recovery-Score (Phase 2).
+Kalender-Abo für iPhone- oder Google-Kalender, Aktive Kalorien (doppelte Zählung von iPhone und Watch), Workouts aus Health (kommen per Sprache), Recovery-Score (Phase 2).

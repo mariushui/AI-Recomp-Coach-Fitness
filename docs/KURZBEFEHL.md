@@ -28,7 +28,7 @@ App **Kurzbefehle** öffnen, **+**, Name: **Recomp Health** (genau so, die App s
 
 ### Baustein pro Kennzahl
 
-Diesen Block baust du 5-mal, je einmal für:
+Diesen Block baust du 6-mal, je einmal für:
 
 | Kennzahl | Typ in Health | Variablen-Namen |
 |---|---|---|
@@ -37,6 +37,7 @@ Diesen Block baust du 5-mal, je einmal für:
 | Ruhepuls | Ruheherzfrequenz (Resting Heart Rate) | `RW` und `RD` |
 | HRV | Herzfrequenzvariabilität (Heart Rate Variability) | `HW` und `HD` |
 | VO2max | Cardiofitness (VO2 Max) | `VW` und `VD` |
+| Blutsauerstoff | Blutsauerstoff (Blood Oxygen) | `BW` und `BD` |
 
 Für Gewicht sieht der Block so aus:
 
@@ -52,6 +53,15 @@ Für Gewicht sieht der Block so aus:
 6. **Variable festlegen**: `GD`
 
 Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur Typ und Variablen-Namen ändern.
+
+### Baustein Schritte
+
+iPhone und Watch zählen Schritte parallel. Damit nichts doppelt zählt, schickt der Kurzbefehl die Quelle mit. Der Server nimmt pro Tag die Quelle mit den meisten Schritten.
+
+1. **Health-Samples suchen**: Typ **Schritte** (Steps), Startdatum in den letzten **3 Tagen**, sortiert nach Startdatum, älteste zuerst
+2. **Details von Health-Samples abrufen**: **Wert** → **Variable festlegen** `TW`
+3. **Details von Health-Samples abrufen**: **Startdatum** → **Datum formatieren** ISO 8601 mit Uhrzeit → **Variable festlegen** `TD`
+4. **Details von Health-Samples abrufen**: **Quelle** (Source) → **Variable festlegen** `TQ`
 
 ### Baustein Schlaf
 
@@ -76,6 +86,8 @@ Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur 
    | `resting_hr` | Wörterbuch | `values` = `RW`, `dates` = `RD` |
    | `hrv` | Wörterbuch | `values` = `HW`, `dates` = `HD` |
    | `vo2max` | Wörterbuch | `values` = `VW`, `dates` = `VD` |
+   | `spo2` | Wörterbuch | `values` = `BW`, `dates` = `BD` |
+   | `steps` | Wörterbuch | `values` = `TW`, `dates` = `TD`, `sources` = `TQ` |
    | `sleep` | Wörterbuch | `values` = `SW`, `starts` = `SS`, `ends` = `SE` |
 
    Wichtig: Die Variablen in ein **Text**-Feld einsetzen. Shortcuts schreibt Listen dann zeilenweise, genau so erwartet es der Server.
@@ -86,7 +98,7 @@ Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur 
 ### Erster Test
 
 Kurzbefehl einmal von Hand starten. iOS fragt nach Health-Zugriff, alles erlauben.
-Erwartete Mitteilung, zum Beispiel: „18 Werte für 3 Tag(e) gespeichert (…)“.
+Erwartete Mitteilung, zum Beispiel: „24 Werte für 3 Tag(e) gespeichert (…)“.
 
 Klappt etwas nicht, in der URL hinten `?dry=1` anhängen und als letzte Aktion **Ergebnis anzeigen** (Show Result) mit *Inhalte von URL* einsetzen.
 Der Server speichert dann nichts. Er zeigt nur, was er erkannt hat, und listet unter `warnings` jede Zeile, die er nicht lesen konnte. Den Text kannst du mir schicken.

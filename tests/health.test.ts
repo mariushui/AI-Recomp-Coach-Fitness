@@ -83,7 +83,7 @@ describe('parseHealthPayload', () => {
   });
 
   it('meldet Fehler statt abzustürzen', () => {
-    const r = parseHealthPayload({ metrics: { weight: { values: '82\n83', dates: '2026-11-01T07:00:00+01:00' }, steps: {} } });
+    const r = parseHealthPayload({ metrics: { weight: { values: '82\n83', dates: '2026-11-01T07:00:00+01:00' }, quatsch: {} } });
     expect(r.rows).toEqual([]);
     expect(r.warnings.length).toBe(2);
     expect(parseHealthPayload({}).warnings[0]).toMatch(/metrics/);
@@ -93,5 +93,32 @@ describe('parseHealthPayload', () => {
     const r = parseHealthPayload({ metrics: { weight: { values: '8240', dates: '2026-11-01T07:00:00+01:00' } } });
     expect(r.rows).toEqual([]);
     expect(r.warnings[0]).toMatch(/plausibl/);
+  });
+});
+
+describe('Schritte und Blutsauerstoff', () => {
+  it('nimmt pro Tag die Quelle mit den meisten Schritten', () => {
+    const r = parseHealthPayload({
+      metrics: {
+        steps: {
+          values: '1.200\n3000\n1000\n2500\n500',
+          dates: ['2026-11-01T08:00:00+01:00', '2026-11-01T12:00:00+01:00', '2026-11-01T08:05:00+01:00', '2026-11-01T12:10:00+01:00', '2026-11-02T09:00:00+01:00'].join('\n'),
+          sources: 'Watch\nWatch\niPhone\niPhone\niPhone',
+        },
+      },
+    });
+    expect(r.warnings).toEqual([]);
+    const byId = Object.fromEntries(r.rows.map((x) => [x.external_id, x]));
+    expect(byId['steps:2026-11-01'].data.value).toBe(4200);
+    expect(byId['steps:2026-11-02'].data.value).toBe(500);
+  });
+  it('warnt ohne Quellen und summiert alles', () => {
+    const r = parseHealthPayload({ metrics: { steps: { values: '100\n200', dates: '2026-11-01T08:00:00+01:00\n2026-11-01T09:00:00+01:00' } } });
+    expect(r.rows[0].data.value).toBe(300);
+    expect(r.warnings[0]).toMatch(/Quellen/);
+  });
+  it('rechnet Blutsauerstoff in Prozent und mittelt', () => {
+    const r = parseHealthPayload({ metrics: { spo2: { values: '0,97\n0,95', dates: '2026-11-02T02:00:00+01:00\n2026-11-02T04:00:00+01:00' } } });
+    expect(r.rows[0].data).toEqual({ metric: 'spo2', value: 96, unit: '%' });
   });
 });
