@@ -31,7 +31,7 @@ const CHARTS = [
   { key: 'training', label: 'Training pro Woche' },
   { key: 'plan', label: 'Plan erfüllt' },
   { key: 'sleep', label: 'Schlaf und HRV' },
-  { key: 'steps', label: 'Schritte' },
+  { key: 'steps', label: 'Aktivität (Schritte, Ringe)' },
   { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
   { key: 'rhr', label: 'Ruhepuls' },
 ] as const;
@@ -53,6 +53,12 @@ const BODY_SERIES = [
   { key: 'fat', label: 'Körperfett %', color: '#FBBF24' },
   { key: 'bmi', label: 'BMI', color: '#F472B6' },
 ] as const;
+const ACTIVITY_SERIES = [
+  { key: 'steps', label: 'Schritte', color: '#64748b' },
+  { key: 'activeKcal', label: 'Bewegen kcal', color: '#FF375F' },
+  { key: 'exerciseMin', label: 'Trainieren min', color: '#ADFF2F' },
+] as const;
+
 const MACROS = [
   { key: 'protein', label: 'Protein', color: '#8B5CF6', unit: 'g' },
   { key: 'carbs', label: 'Kohlenhydrate', color: '#38BDF8', unit: 'g' },
@@ -134,7 +140,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, refreshKey]);
 
-  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'lean']);
+  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'lean', 'bmi']);
+  const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
+  const [activityOn, toggleActivity] = useToggleSet(['steps', 'activeKcal', 'exerciseMin']);
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heightCm, setHeightCm] = useState<number | null>(null);
@@ -232,7 +240,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         <Chart
           title="Gewicht und Körperzusammensetzung"
           hint={`Linien = 7-Tage-Schnitt. Fett + Magermasse = Gewicht. Steigt die Magermasse bei sinkendem Fett, klappt die Recomposition. Rechte Achse: % und BMI.${heightCm ? '' : ' Für den BMI unter Mehr die Körpergröße eintragen.'}`}
-          controls={<Chips items={BODY_SERIES.filter((x) => x.key !== 'bmi' || heightCm)} on={bodyOn} toggle={toggleBody} />}
+          controls={<Chips items={BODY_SERIES} on={bodyOn} toggle={toggleBody} />}
         >
           <ComposedChart data={days}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
@@ -297,14 +305,16 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       )}
 
       {show('training') && weeks.length > 0 && (
-        <Chart title="Training pro Woche (min)">
+        <Chart
+          title="Training pro Woche (min)"
+          controls={<Chips items={sportsUsed.map((x) => ({ key: x, label: SPORT_LABEL[x], color: SPORT_COLORS[x] }))} on={sportOn} toggle={toggleSport} />}
+        >
           <BarChart data={weeks}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             <XAxis dataKey="label" {...axis} />
             <YAxis {...axis} width={36} />
             <Tooltip {...tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            {sportsUsed.map((s) => (
+            {sportsUsed.filter((x) => sportOn.has(x)).map((s) => (
               <Bar key={s} dataKey={s} name={SPORT_LABEL[s]} stackId="a" fill={SPORT_COLORS[s]} />
             ))}
           </BarChart>
@@ -339,15 +349,28 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         </Chart>
       )}
 
-      {show('steps') && has('steps') && (
-        <Chart title="Schritte pro Tag" hint={`Ø ${average(days, 'steps')?.toLocaleString('de-DE') ?? '–'} pro Tag im Zeitraum. Linie = 7-Tage-Schnitt.`}>
-          <ComposedChart data={days.map((d, i, arr) => ({ ...d, stepsAvg: movingAverage(arr.map((x) => x.steps))[i] }))}>
+      {show('steps') && (has('steps') || has('activeKcal') || has('exerciseMin')) && (
+        <Chart
+          title="Aktivität"
+          hint={[
+            average(days, 'steps') !== undefined && `Ø ${average(days, 'steps')!.toLocaleString('de-DE')} Schritte`,
+            average(days, 'activeKcal') !== undefined && `Ø ${average(days, 'activeKcal')} aktive kcal`,
+            average(days, 'exerciseMin') !== undefined && `Ø ${average(days, 'exerciseMin')} Trainingsminuten pro Tag`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          controls={<Chips items={ACTIVITY_SERIES} on={activityOn} toggle={toggleActivity} />}
+        >
+          <ComposedChart data={days}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             <XAxis dataKey="label" {...axis} minTickGap={24} />
-            <YAxis {...axis} width={40} />
+            <YAxis yAxisId="steps" {...axis} width={40} hide={!activityOn.has('steps')} />
+            <YAxis yAxisId="kcal" orientation="right" {...axis} width={36} hide={!activityOn.has('activeKcal')} />
+            <YAxis yAxisId="min" hide />
             <Tooltip {...tooltipStyle} />
-            <Bar dataKey="steps" name="Schritte" fill="#334155" radius={[3, 3, 0, 0]} />
-            <Line dataKey="stepsAvg" name="7-Tage-Schnitt" stroke="#ADFF2F" dot={false} strokeWidth={2} connectNulls />
+            {activityOn.has('steps') && <Bar yAxisId="steps" dataKey="steps" name="Schritte" fill="#334155" radius={[3, 3, 0, 0]} />}
+            {activityOn.has('activeKcal') && <Line yAxisId="kcal" dataKey="activeKcal" name="Bewegen (aktive kcal)" stroke="#FF375F" strokeWidth={2} dot={false} connectNulls />}
+            {activityOn.has('exerciseMin') && <Line yAxisId="min" dataKey="exerciseMin" name="Trainieren (min)" stroke="#ADFF2F" strokeWidth={2} dot={false} connectNulls />}
           </ComposedChart>
         </Chart>
       )}
