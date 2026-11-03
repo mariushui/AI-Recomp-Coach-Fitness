@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
+import { loadProfile, saveProfile, suggestedProteinGoal } from '../lib/profile';
+import { listEntries } from '../lib/entries';
+import { dailyStats } from '../lib/stats';
+import { addDays } from '../lib/time';
 import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
-import { Button, Card, ErrorBox, TextField } from './ui';
+import { Button, Card, ErrorBox, NumberField, TextField } from './ui';
 
 const GUIDE_URL = 'https://github.com/mariushui/AI-Recomp-Coach-Fitness/blob/main/docs/KURZBEFEHL.md';
 export const SHORTCUT_NAME = 'Recomp Health';
@@ -17,6 +21,10 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 
 const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ session, onDataChanged }) => {
   const [name, setName] = useState<string | undefined>();
+  const [height, setHeight] = useState<number | undefined>();
+  const [proteinGoal, setProteinGoal] = useState<number | undefined>();
+  const [kcalGoal, setKcalGoal] = useState<number | undefined>();
+  const [lastWeight, setLastWeight] = useState<number | undefined>();
   const [token, setToken] = useState<string | null>(null);
   const [lastUsed, setLastUsed] = useState<string | null | undefined>();
   const [legacyJson, setLegacyJson] = useState<string | undefined>();
@@ -25,12 +33,21 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => setName(data?.display_name ?? undefined));
+    loadProfile(session.user.id)
+      .then((p) => {
+        setName(p.display_name ?? undefined);
+        setHeight(p.height_cm ?? undefined);
+        setProteinGoal(p.protein_goal_g ?? undefined);
+        setKcalGoal(p.kcal_goal ?? undefined);
+      })
+      .catch(() => undefined);
+    const now = new Date();
+    listEntries(addDays(now, -30), addDays(now, 1))
+      .then((list) => {
+        const w = dailyStats(list, addDays(now, -30), addDays(now, 1)).map((d) => d.weight).filter((x): x is number => typeof x === 'number');
+        setLastWeight(w.length ? w[w.length - 1] : undefined);
+      })
+      .catch(() => undefined);
     supabase
       .from('ingest_tokens')
       .select('last_used_at')
@@ -67,9 +84,21 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
 
   const saveName = () =>
     run(async () => {
-      const { error } = await supabase.from('profiles').update({ display_name: name ?? null }).eq('id', session.user.id);
-      if (error) throw error;
-      setMsg('Name gespeichert.');
+      const p = proteinGoal === undefined ? null : Math.round(proteinGoal);
+      const k = kcalGoal === undefined ? null : Math.round(kcalGoal);
+      if (p !== null && (p < 30 || p > 400)) throw new Error('Protein-Ziel bitte zwischen 30 und 400 g.');
+      if (k !== null && (k < 800 || k > 6000)) throw new Error('Kalorien-Ziel bitte zwischen 800 und 6.000 kcal.');
+      if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
+      await saveProfile(session.user.id, {
+        display_name: name ?? null,
+        height_cm: height ?? null,
+        protein_goal_g: p,
+        kcal_goal: k,
+      });
+      setProteinGoal(p ?? undefined);
+      setKcalGoal(k ?? undefined);
+      onDataChanged();
+      setMsg('Profil gespeichert.');
     });
 
   const createToken = () =>
@@ -123,6 +152,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
     });
 
   const endpoint = `${functionsUrl}/health-ingest`;
+  const exportEndpoint = `${functionsUrl}/health-export`;
 
   return (
     <div className="space-y-4">
@@ -132,6 +162,24 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       <Section title="Profil">
         <p className="text-sm text-slate-400">{session.user.email}</p>
         <TextField label="Name" value={name} onChange={setName} />
+        <NumberField label="Körpergröße" unit="cm" value={height} onChange={setHeight} />
+        <p className="text-xs text-slate-500">Wird nur für den BMI im Verlauf gebraucht.</p>
+        <Button variant="ghost" onClick={saveName}>
+          Speichern
+        </Button>
+      </Section>
+
+      <Section title="Tagesziele">
+        <p className="text-sm text-slate-400">Erscheinen im Verlauf als Linie und auf der Startseite als Fortschritt. Leer lassen, wenn du kein Ziel willst.</p>
+        <div className="grid grid-cols-2 gap-2">
+          <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
+          <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />
+        </div>
+        {suggestedProteinGoal(lastWeight) !== undefined && proteinGoal !== suggestedProteinGoal(lastWeight) && (
+          <button type="button" className="text-xs text-cyber-purple underline" onClick={() => setProteinGoal(suggestedProteinGoal(lastWeight))}>
+            Vorschlag für Recomposition: {suggestedProteinGoal(lastWeight)} g (2 g pro kg bei {lastWeight} kg)
+          </button>
+        )}
         <Button variant="ghost" onClick={saveName}>
           Speichern
         </Button>
@@ -139,7 +187,10 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
 
       <Section title="Apple Health">
         <p className="text-sm text-slate-300">
-          Ein iOS-Kurzbefehl schickt Gewicht, Körperfett, Schlaf, HRV, Ruhepuls und VO2max an die App. Er sendet immer die letzten 3 Tage. Fällt ein Lauf aus, holt der nächste die Werte nach.
+          Ein iOS-Kurzbefehl schickt Gewicht, Körperfett, Schlaf, HRV, Ruhepuls, VO2max, Blutsauerstoff und Schritte an die App. Er sendet immer die letzten 3 Tage. Fällt ein Lauf aus, holt der nächste die Werte nach.
+        </p>
+        <p className="text-sm text-slate-300">
+          Zurück nach Apple Health gehen Kalorien, Protein, Kohlenhydrate und Fett deiner Mahlzeiten sowie Blutzucker aus den Blutwerten. Jeder Wert nur einmal.
         </p>
         <p className="text-sm text-slate-400">
           Status:{' '}
@@ -167,6 +218,11 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
           <code className="block text-xs break-all text-slate-300">{endpoint}</code>
           <Button variant="ghost" className="w-full" onClick={() => copy(endpoint, 'url')}>
             {copied === 'url' ? 'Kopiert' : 'Adresse kopieren'}
+          </Button>
+          <p className="text-xs text-slate-500 pt-2">Adresse für den Rückweg nach Apple Health</p>
+          <code className="block text-xs break-all text-slate-300">{exportEndpoint}</code>
+          <Button variant="ghost" className="w-full" onClick={() => copy(exportEndpoint, 'export')}>
+            {copied === 'export' ? 'Kopiert' : 'Adresse kopieren'}
           </Button>
         </div>
         <div className="flex gap-2">

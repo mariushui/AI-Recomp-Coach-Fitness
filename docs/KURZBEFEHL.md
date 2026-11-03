@@ -14,12 +14,12 @@ Frühere Lösungen mit Auto-Export und Push waren bei dir instabil. Die häufigs
 | iPhone gesperrt, Health-Daten sind dann verschlüsselt und der Lauf scheitert still | Auslöser ist das Entsperren beim Öffnen einer App, nicht eine feste Uhrzeit |
 | Ein Lauf fällt aus und der Tag fehlt für immer | Jeder Lauf sendet die letzten 3 Tage. Der nächste Lauf holt Lücken nach |
 | Doppelte Werte durch mehrfaches Senden | Der Server speichert pro Kennzahl und Tag genau einen Wert und überschreibt ihn |
-| Fehler bleiben unbemerkt | Der Kurzbefehl zeigt nach jedem Lauf eine Mitteilung mit dem Ergebnis. Die App zeigt unter **Mehr** den letzten Empfang |
+| Fehler bleiben unbemerkt | Der Kurzbefehl zeigt nach jedem Lauf eine Mitteilung mit dem Ergebnis. Die App zeigt unter **Einstellungen** den letzten Empfang |
 | Schlaf doppelt gezählt (Watch und Schlaf-App) | Der Server zählt überlappende Zeiten nur einmal |
 
 ## Vorbereitung
 
-1. In der App **Mehr > Apple Health > Token erstellen**. Token kopieren und in einer Notiz zwischenspeichern.
+1. In der App **Einstellungen > Apple Health > Token erstellen**. Token kopieren und in einer Notiz zwischenspeichern.
 2. Ebenda die **Adresse** kopieren. Sie endet auf `/functions/v1/health-ingest`.
 
 ## Kurzbefehl bauen
@@ -28,7 +28,7 @@ App **Kurzbefehle** öffnen, **+**, Name: **Recomp Health** (genau so, die App s
 
 ### Baustein pro Kennzahl
 
-Diesen Block baust du 5-mal, je einmal für:
+Diesen Block baust du 7-mal, je einmal für:
 
 | Kennzahl | Typ in Health | Variablen-Namen |
 |---|---|---|
@@ -37,6 +37,8 @@ Diesen Block baust du 5-mal, je einmal für:
 | Ruhepuls | Ruheherzfrequenz (Resting Heart Rate) | `RW` und `RD` |
 | HRV | Herzfrequenzvariabilität (Heart Rate Variability) | `HW` und `HD` |
 | VO2max | Cardiofitness (VO2 Max) | `VW` und `VD` |
+| Blutsauerstoff | Blutsauerstoff (Blood Oxygen) | `BW` und `BD` |
+| Cardio-Erholung (HRR) | Cardio-Erholung (Cardio Recovery) | `CW` und `CD` |
 
 Für Gewicht sieht der Block so aus:
 
@@ -52,6 +54,26 @@ Für Gewicht sieht der Block so aus:
 6. **Variable festlegen**: `GD`
 
 Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur Typ und Variablen-Namen ändern.
+
+### Baustein Schritte
+
+iPhone und Watch zählen Schritte parallel. Damit nichts doppelt zählt, schickt der Kurzbefehl die Quelle mit. Der Server nimmt pro Tag die Quelle mit den meisten Schritten.
+
+1. **Health-Samples suchen**: Typ **Schritte** (Steps), Startdatum in den letzten **3 Tagen**, sortiert nach Startdatum, älteste zuerst
+2. **Details von Health-Samples abrufen**: **Wert** → **Variable festlegen** `TW`
+3. **Details von Health-Samples abrufen**: **Startdatum** → **Datum formatieren** ISO 8601 mit Uhrzeit → **Variable festlegen** `TD`
+4. **Details von Health-Samples abrufen**: **Quelle** (Source) → **Variable festlegen** `TQ`
+
+### Bausteine Aktivitätsringe
+
+Gleich gebaut wie Schritte, also mit Quelle:
+
+| Ring | Typ in Health | Variablen |
+|---|---|---|
+| Bewegen | Aktive Energie (Active Energy) | `AW`, `AD`, `AQ` |
+| Trainieren | Trainingsminuten (Exercise Minutes) | `EW`, `ED`, `EQ` |
+
+Den Ring „Stehen“ lassen wir weg.
 
 ### Baustein Schlaf
 
@@ -76,6 +98,11 @@ Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur 
    | `resting_hr` | Wörterbuch | `values` = `RW`, `dates` = `RD` |
    | `hrv` | Wörterbuch | `values` = `HW`, `dates` = `HD` |
    | `vo2max` | Wörterbuch | `values` = `VW`, `dates` = `VD` |
+   | `spo2` | Wörterbuch | `values` = `BW`, `dates` = `BD` |
+   | `hr_recovery` | Wörterbuch | `values` = `CW`, `dates` = `CD` |
+   | `steps` | Wörterbuch | `values` = `TW`, `dates` = `TD`, `sources` = `TQ` |
+   | `active_kcal` | Wörterbuch | `values` = `AW`, `dates` = `AD`, `sources` = `AQ` |
+   | `exercise_min` | Wörterbuch | `values` = `EW`, `dates` = `ED`, `sources` = `EQ` |
    | `sleep` | Wörterbuch | `values` = `SW`, `starts` = `SS`, `ends` = `SE` |
 
    Wichtig: Die Variablen in ein **Text**-Feld einsetzen. Shortcuts schreibt Listen dann zeilenweise, genau so erwartet es der Server.
@@ -86,10 +113,58 @@ Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur 
 ### Erster Test
 
 Kurzbefehl einmal von Hand starten. iOS fragt nach Health-Zugriff, alles erlauben.
-Erwartete Mitteilung, zum Beispiel: „18 Werte für 3 Tag(e) gespeichert (…)“.
+Erwartete Mitteilung, zum Beispiel: „24 Werte für 3 Tag(e) gespeichert (…)“.
 
 Klappt etwas nicht, in der URL hinten `?dry=1` anhängen und als letzte Aktion **Ergebnis anzeigen** (Show Result) mit *Inhalte von URL* einsetzen.
 Der Server speichert dann nichts. Er zeigt nur, was er erkannt hat, und listet unter `warnings` jede Zeile, die er nicht lesen konnte. Den Text kannst du mir schicken.
+
+## Rückweg: Ernährung und Blutzucker nach Apple Health
+
+Derselbe Kurzbefehl schreibt danach deine Mahlzeiten nach Apple Health: Kalorien, Protein, Kohlenhydrate, Fett. Dazu Blutzucker, wenn du ihn als Blutwert mit Einheit mg/dL oder mmol/L erfasst hast.
+Andere Blutwerte (HbA1c, LDL, Vitamin D) und Trainings werden nicht übertragen. Apple Health hat dafür keinen passenden Messwert, Trainings zeichnet die Watch auf.
+
+Stand: Server getestet, Kurzbefehl am iPhone noch nicht durchgeklickt.
+
+Die Bausteine kommen ans Ende von **Recomp Health**, nach **Mitteilung anzeigen**.
+
+### 1. Neue Werte abholen
+
+1. **Inhalte von URL abrufen**
+   - URL: die zweite Adresse aus der App, sie endet auf `/functions/v1/health-export`
+   - Methode **POST**, Header `x-recomp-token` mit deinem Token, Anfragetext **JSON** ohne Felder
+2. **Variable festlegen**: `EX`
+
+### 2. Baustein pro Nährwert
+
+Diesen Block baust du 4-mal, dazu einmal für Blutzucker:
+
+| Schlüssel | Typ in Health | Einheit |
+|---|---|---|
+| `energy` | Nahrungsenergie (Dietary Energy) | kcal |
+| `protein` | Protein | g |
+| `carbs` | Kohlenhydrate (Carbohydrates) | g |
+| `fat` | Fett gesamt (Total Fat) | g |
+| `glucose` | Blutzucker (Blood Glucose) | mg/dL |
+
+Für `energy`:
+
+1. **Wörterbuchwert abrufen**: Wert für Schlüssel `energy` aus `EX`
+2. **Wiederholen mit jedem Objekt** (Repeat with Each) in *Wörterbuchwert*. Darin:
+   1. **Wörterbuchwert abrufen**: `value` aus *Wiederholungsobjekt*
+   2. **Wörterbuchwert abrufen**: `date` aus *Wiederholungsobjekt*
+   3. **Health-Probe protokollieren** (Log Health Sample): Typ **Nahrungsenergie**, Wert = `value`, Einheit **kcal**, Datum = `date`
+
+Ist eine Liste leer, läuft die Wiederholung einfach nicht. Das ist gewollt.
+
+### 3. Empfang bestätigen
+
+Erst jetzt gelten die Werte als übertragen. Fällt dieser Schritt aus, kommen sie beim nächsten Lauf erneut.
+
+1. **Wörterbuchwert abrufen**: `receipt` aus `EX`
+2. **Inhalte von URL abrufen**: gleiche Adresse und Header wie in Schritt 1, Anfragetext **JSON** mit Feld `confirm` (Text) = *Wörterbuchwert*
+3. Optional: **Wörterbuchwert abrufen** `summary` aus `EX` und **Mitteilung anzeigen**
+
+Hinweis: Änderst du eine Mahlzeit nach der Übertragung in der App, bleibt in Apple Health der alte Wert stehen. Korrigiere ihn dann in der Health-App.
 
 ## Automatisch auslösen
 
@@ -104,7 +179,7 @@ Der Server speichert dann nichts. Er zeigt nur, was er erkannt hat, und listet u
 
 Mehrfaches Laufen am Tag schadet nicht.
 
-**Von Hand**: In der App unter **Mehr** gibt es **Jetzt syncen**. Das startet den Kurzbefehl direkt.
+**Von Hand**: In der App unter **Einstellungen** gibt es **Jetzt syncen**. Das startet den Kurzbefehl direkt.
 
 ## Für Freunde
 

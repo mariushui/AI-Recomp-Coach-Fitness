@@ -3,19 +3,20 @@ import type { Session } from '@supabase/supabase-js';
 import { isConfigured, supabase } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
 import QuickLog from './components/QuickLog';
-import DayView from './components/DayView';
+import CalendarView from './components/CalendarView';
 import Settings from './components/Settings';
 import { Card } from './components/ui';
+import { Icons } from './components/icons';
 
 const Trends = lazy(() => import('./components/Trends'));
 
-type Tab = 'log' | 'day' | 'trends' | 'settings';
+type Tab = 'log' | 'calendar' | 'trends' | 'settings';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'log', label: 'Erfassen', icon: '＋' },
-  { id: 'day', label: 'Tag', icon: '☰' },
-  { id: 'trends', label: 'Verlauf', icon: '📈' },
-  { id: 'settings', label: 'Mehr', icon: '⚙' },
+const TABS: { id: Tab; label: string; icon: (typeof Icons)['Plus'] }[] = [
+  { id: 'log', label: 'Erfassen', icon: Icons.Plus },
+  { id: 'calendar', label: 'Kalender', icon: Icons.Calendar },
+  { id: 'trends', label: 'Verlauf', icon: Icons.Chart },
+  { id: 'settings', label: 'Einstellungen', icon: Icons.Gear },
 ];
 
 function App() {
@@ -60,8 +61,8 @@ function App() {
       </header>
 
       <main className="max-w-xl mx-auto px-4 pt-4">
-        {tab === 'log' && <QuickLog onSaved={bump} />}
-        {tab === 'day' && <DayView refreshKey={refreshKey} />}
+        {tab === 'log' && <QuickLog onSaved={bump} refreshKey={refreshKey} />}
+        {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChanged={bump} />}
         {tab === 'trends' && (
           <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
             <Trends refreshKey={refreshKey} />
@@ -78,7 +79,7 @@ function App() {
               onClick={() => setTab(t.id)}
               className={`py-3 text-xs font-bold ${tab === t.id ? 'text-cyber-green' : 'text-slate-500'}`}
             >
-              <span className="block text-lg leading-none mb-1">{t.icon}</span>
+              <t.icon size={24} weight="regular" className="mx-auto mb-1" aria-hidden />
               {t.label}
             </button>
           ))}

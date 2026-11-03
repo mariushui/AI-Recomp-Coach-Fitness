@@ -1,16 +1,21 @@
 // POST /functions/v1/parse-log
-// Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone }
+// Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone, image?: { mime, data (Base64) } }
+// Mit image wertet die KI ein Essensfoto aus. Das Foto wird nicht gespeichert.
 // Antwort: { entries: ParsedEntry[], questions: string[] }
 // Speichert nichts. Die App zeigt das Ergebnis zur Bestätigung und speichert dann selbst.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/http.ts';
 import { RESPONSE_SCHEMA, buildSystemPrompt, buildUserPrompt, normalizeParseResult } from '../_shared/parse.ts';
+import { checkImage, type ImageInput } from '../_shared/image.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
-const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash';
 const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? '60');
 const MAX_CHARS = 4000;
+// Unter dem Zeitlimit der Edge Function (150 s), damit die App eine klare Meldung bekommt statt eines Abbruchs.
+const GEMINI_TIMEOUT_MS = 60_000;
+const BUSY = 'Die KI ist gerade überlastet. Versuch es in ein paar Minuten nochmal.';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -24,14 +29,20 @@ Deno.serve(async (req) => {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError || !userData.user) return json({ error: 'Nicht angemeldet' }, 401);
 
-  let body: { text?: string; now?: string; tz?: string };
+  let body: { text?: string; now?: string; tz?: string; image?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ error: 'Ungültiges JSON' }, 400);
   }
   const text = (body.text ?? '').trim();
-  if (!text) return json({ error: 'Kein Text' }, 400);
+  let image: ImageInput | null = null;
+  if (body.image != null) {
+    const check = checkImage(body.image);
+    if (!check.ok) return json({ error: check.error }, 400);
+    image = check.image;
+  }
+  if (!text && !image) return json({ error: 'Kein Text und kein Foto' }, 400);
   if (text.length > MAX_CHARS) return json({ error: `Text zu lang (max. ${MAX_CHARS} Zeichen)` }, 400);
   const now = body.now ?? new Date().toISOString();
   const tz = body.tz ?? 'Europe/Berlin';
@@ -40,24 +51,37 @@ Deno.serve(async (req) => {
   if (quotaError) return json({ error: 'Kontingent-Prüfung fehlgeschlagen' }, 500);
   if (!allowed) return json({ error: `Tageslimit von ${DAILY_LIMIT} KI-Anfragen erreicht` }, 429);
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
+  let res: Response;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
       method: 'POST',
+      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
-        contents: [{ role: 'user', parts: [{ text: buildUserPrompt(text, now, tz) }] }],
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              ...(image ? [{ inlineData: { mimeType: image.mime, data: image.data } }] : []),
+              { text: buildUserPrompt(text, now, tz, image !== null) },
+            ],
+          },
+        ],
         generationConfig: {
           temperature: 0.2,
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-    },
-  );
+    });
+  } catch (e) {
+    console.error('Gemini timeout or network error', e);
+    return json({ error: BUSY }, 503);
+  }
   if (!res.ok) {
     console.error('Gemini error', res.status, await res.text());
+    if (res.status === 503 || res.status === 429) return json({ error: BUSY }, 503);
     return json({ error: `KI-Dienst antwortet mit Status ${res.status}` }, 502);
   }
   const out = await res.json();

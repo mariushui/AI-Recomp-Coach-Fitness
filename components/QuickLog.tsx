@@ -1,24 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { EntryKind, NewEntry } from '../supabase/functions/_shared/domain';
+import type { EntryKind, EntrySource, NewEntry } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
 import { insertEntries, parseText } from '../lib/entries';
-import { KIND_ICON } from '../lib/format';
-import { localIso } from '../lib/time';
+import { prepareImage, type PreparedImage } from '../lib/image';
+import { insertSlots } from '../lib/planSlotsApi';
+import { slotsFromDrafts } from '../lib/planTemplate';
+import type { PlanData } from '../supabase/functions/_shared/domain';
+import { EntryIcon, Icons } from './icons';
+import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
 import { Button, Card, ErrorBox } from './ui';
+import TodayBar from './TodayBar';
 
 const DRAFT_KEY = 'recomp_quicklog_text';
 
 const QUICK_ADD: { kind: EntryKind; label: string; data: any }[] = [
   { kind: 'meal', label: 'Mahlzeit', data: {} },
   { kind: 'workout', label: 'Training', data: { sport: 'tennis' } },
+  { kind: 'plan', label: 'Plan', data: { sport: 'tennis' } },
   { kind: 'body', label: 'Gewicht', data: {} },
   { kind: 'wellbeing', label: 'Befinden', data: {} },
-  { kind: 'lab', label: 'Laborwert', data: {} },
-  { kind: 'note', label: 'Notiz', data: {} },
+  { kind: 'lab', label: 'Blutwerte', data: {} },
 ];
 
 const EXAMPLES = [
+  'Plan für die Woche: Dienstag 18 Uhr Tennisstunde, Fokus Rückhand. Donnerstag 8 km locker laufen. Samstag Capoeira',
   'Frühstück: 3 Eier, 80 g Haferflocken mit Heidelbeeren, 30 g Whey',
   'Tennis 90 Minuten Training, Fokus Aufschlag. High: Kick-Aufschlag kam stabil. Low: Rückhand-Slice zu kurz. Belastung 7',
   'Gut geschlafen, Energie hoch, leichter Muskelkater in den Waden, rechter Ellbogen zwickt etwas',
@@ -51,7 +57,7 @@ function useSpeech(onText: (t: string) => void) {
   return { supported: Boolean(SR), listening, start, stop };
 }
 
-const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
+const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSaved, refreshKey = 0 }) => {
   const [text, setText] = useState(() => {
     try {
       return localStorage.getItem(DRAFT_KEY) ?? '';
@@ -61,9 +67,12 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   });
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
-  const [rawText, setRawText] = useState<string | null>(null);
   const [usedVoice, setUsedVoice] = useState(false);
-  const [busy, setBusy] = useState<'parse' | 'save' | null>(null);
+  const [photo, setPhoto] = useState<PreparedImage | null>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
+  const [asTemplate, setAsTemplate] = useState(false);
+  const [busy, setBusy] = useState<'parse' | 'save' | 'photo' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -80,18 +89,37 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     setText((prev) => (prev ? `${prev} ${t}` : t));
   });
 
+  const pickPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // dasselbe Foto erneut wählbar
+    if (!file) return;
+    setError(null);
+    setSaved(null);
+    setBusy('photo');
+    try {
+      setPhoto(await prepareImage(file));
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const analyse = async () => {
     setError(null);
     setSaved(null);
     setBusy('parse');
     try {
-      const r = await parseText(text);
+      const r = await parseText(text, photo?.image);
       if (r.entries.length === 0) {
-        setError('Nichts erkannt. Du kannst den Text als Notiz speichern.');
+        setError(photo ? 'Kein Essen erkannt. Schreib dazu, was auf dem Teller ist.' : 'Nichts erkannt. Du kannst den Text als Notiz speichern.');
       }
-      setDrafts((prev) => [...prev, ...r.entries.map((e) => ({ ...e }))]);
+      const source: EntrySource = photo ? 'photo' : usedVoice ? 'voice' : 'text';
+      setDrafts((prev) => [...prev, ...r.entries.map((e) => ({ ...e, source, raw_text: text || null }))]);
+      setUsedVoice(false);
       setQuestions(r.questions);
-      setRawText(text);
+      if (photo && r.entries.length > 0) setPhoto(null);
+      if (/(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(text)) setAsTemplate(true);
     } catch (e: any) {
       setError(`KI nicht erreichbar: ${e.message}. Der Text bleibt erhalten, du kannst ihn als Notiz speichern.`);
     } finally {
@@ -100,8 +128,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
   };
 
   const saveAsNote = () => {
-    setDrafts((prev) => [...prev, { kind: 'note', occurred_at: localIso(), data: { text } }]);
-    setRawText(text);
+    setDrafts((prev) => [...prev, { kind: 'note', occurred_at: localIso(), data: { text }, source: usedVoice ? 'voice' : 'text', raw_text: text }]);
   };
 
   const saveAll = async () => {
@@ -109,27 +136,41 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     setBusy('save');
     try {
       const rows: NewEntry[] = [];
+      const templatePlans: { occurred_at: string; data: PlanData }[] = [];
       for (const d of drafts) {
+        if (asTemplate && d.kind === 'plan') {
+          const data = normalizeData('plan', d.data);
+          if (data) templatePlans.push({ occurred_at: d.occurred_at, data });
+          continue;
+        }
         const data = normalizeData(d.kind, d.data);
         if (!data) continue;
         rows.push({
           kind: d.kind,
           occurred_at: d.occurred_at,
           data,
-          source: d.manual || !rawText ? 'manual' : usedVoice ? 'voice' : 'text',
-          raw_text: d.manual ? null : rawText,
+          source: d.manual ? 'manual' : (d.source ?? 'text'),
+          raw_text: d.manual ? null : (d.raw_text ?? null),
         });
       }
-      if (rows.length === 0) {
+      if (rows.length === 0 && templatePlans.length === 0) {
         setError('Keine vollständigen Einträge. Bitte Werte ergänzen.');
         return;
       }
       await insertEntries(rows);
-      setSaved(`${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} gespeichert.`);
+      await insertSlots(slotsFromDrafts(templatePlans, dayKey(new Date())));
+      setSaved(
+        [
+          rows.length && `${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} gespeichert.`,
+          templatePlans.length && `${templatePlans.length} Einheiten im Trainingsplan. Bearbeiten unter Kalender > Trainingsplan.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+      setAsTemplate(false);
       setDrafts([]);
       setQuestions([]);
       setText('');
-      setRawText(null);
       setUsedVoice(false);
       onSaved();
     } catch (e: any) {
@@ -141,6 +182,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
 
   return (
     <div className="space-y-4">
+      <TodayBar refreshKey={refreshKey} />
       <Card>
         <div className="relative">
           <textarea
@@ -158,16 +200,40 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                 speech.listening ? 'bg-red-500 animate-pulse' : 'bg-cyber-purple'
               }`}
             >
-              {speech.listening ? '■' : '🎙'}
+              {speech.listening ? <Icons.Stop size={20} weight="fill" className="mx-auto" /> : <Icons.Mic size={22} className="mx-auto" />}
             </button>
           )}
         </div>
+        {photo && (
+          <div className="relative mt-3 inline-block">
+            <img src={photo.previewUrl} alt="Essensfoto" className="h-28 rounded-xl border border-white/10 object-cover" />
+            <button
+              type="button"
+              onClick={() => setPhoto(null)}
+              aria-label="Foto entfernen"
+              className="absolute -right-2 -top-2 h-8 w-8 rounded-full bg-cyber-black border border-white/20 text-sm"
+            >
+              <Icons.Close size={14} className="mx-auto" />
+            </button>
+          </div>
+        )}
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pickPhoto} />
+        <input ref={libraryRef} type="file" accept="image/*" className="hidden" onChange={pickPhoto} />
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <Button variant="ghost" onClick={() => cameraRef.current?.click()} disabled={busy !== null}>
+            <span className="inline-flex items-center gap-2"><Icons.Camera size={18} /> Foto machen</span>
+          </Button>
+          <Button variant="ghost" onClick={() => libraryRef.current?.click()} disabled={busy !== null}>
+            <span className="inline-flex items-center gap-2"><Icons.Image size={18} /> Mediathek</span>
+          </Button>
+        </div>
+        {photo && <p className="text-xs text-slate-500 mt-2">Optional dazuschreiben, was die KI nicht sehen kann, z. B. „250 g Reis, mit Olivenöl“.</p>}
         {!speech.supported && (
           <p className="text-xs text-slate-500 mt-2">Tipp: Auf dem iPhone die Mikrofon-Taste der Tastatur zum Diktieren nutzen.</p>
         )}
         <div className="flex gap-2 mt-3">
-          <Button className="flex-1" onClick={analyse} disabled={!text.trim() || busy !== null}>
-            {busy === 'parse' ? 'Erkenne …' : 'Erkennen'}
+          <Button className="flex-1" onClick={analyse} disabled={(!text.trim() && !photo) || busy !== null}>
+            {busy === 'parse' ? 'Erkenne …' : busy === 'photo' ? 'Lade Foto …' : photo ? 'Foto auswerten' : 'Erkennen'}
           </Button>
           {text.trim() && (
             <Button variant="ghost" onClick={saveAsNote} disabled={busy !== null}>
@@ -204,6 +270,15 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
               onRemove={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}
             />
           ))}
+          {drafts.some((d) => d.kind === 'plan') && (
+            <label className="flex items-start gap-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 px-3 py-3">
+              <input type="checkbox" className="mt-1 h-4 w-4 accent-[#8B5CF6]" checked={asTemplate} onChange={(e) => setAsTemplate(e.target.checked)} />
+              <span className="text-sm text-slate-200">
+                Geplante Einheiten als festen Trainingsplan speichern
+                <span className="block text-xs text-slate-400">Dann erscheinen sie jede Woche. Sonst nur einmal an diesem Datum.</span>
+              </span>
+            </label>
+          )}
           <Button variant="green" className="w-full" onClick={saveAll} disabled={busy !== null}>
             {busy === 'save' ? 'Speichere …' : `${drafts.length} speichern`}
           </Button>
@@ -220,7 +295,7 @@ const QuickLog: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
               onClick={() => setDrafts((prev) => [...prev, { kind: q.kind, occurred_at: localIso(), data: { ...q.data }, manual: true }])}
               className="rounded-xl bg-cyber-gray border border-white/5 py-3 text-sm text-slate-200"
             >
-              <span className="block text-lg">{KIND_ICON[q.kind]}</span>
+              <EntryIcon kind={q.kind} size={24} className="mx-auto mb-1 text-slate-300" />
               {q.label}
             </button>
           ))}

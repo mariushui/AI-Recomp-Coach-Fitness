@@ -7,3 +7,7 @@ verify_jwt = true
 [functions.health-ingest]
 # Der Kurzbefehl hat kein Supabase-Login. Er authentifiziert sich mit dem eigenen Token (x-recomp-token).
 verify_jwt = false
+
+[functions.health-export]
+# Wie health-ingest: Der Kurzbefehl authentifiziert sich mit dem eigenen Token (x-recomp-token).
+verify_jwt = false

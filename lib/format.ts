@@ -5,6 +5,7 @@ import {
   type EntryKind,
   type MealData,
   type WorkoutData,
+  type PlanData,
   type BodyData,
   type WellbeingData,
   type LabData,
@@ -15,6 +16,7 @@ import {
 export const KIND_ICON: Record<EntryKind, string> = {
   meal: '🍳',
   workout: '🎾',
+  plan: '🗓️',
   body: '⚖️',
   wellbeing: '🙂',
   lab: '🧪',
@@ -28,9 +30,12 @@ const HEALTH_LABEL: Record<string, string> = {
   resting_hr: 'Ruhepuls',
   hrv: 'HRV',
   vo2max: 'VO2max',
+  exercise_min: 'Trainingsminuten',
+  spo2: 'Blutsauerstoff',
+  hr_recovery: 'Cardio-Erholung',
   sleep: 'Schlaf',
   steps: 'Schritte',
-  active_kcal: 'Aktive kcal',
+  active_kcal: 'Aktive Kalorien',
   workout: 'Workout',
 };
 
@@ -53,6 +58,17 @@ export function summarize(kind: EntryKind, data: any): string {
         w.high && `↑ ${w.high}`,
         w.low && `↓ ${w.low}`,
         w.exercises?.length && `${w.exercises.length} Übungen`,
+      ]);
+    }
+    case 'plan': {
+      const p = data as PlanData;
+      return j([
+        p.sport === 'sonstiges' ? p.sport_label ?? 'Training' : SPORT_LABEL[p.sport],
+        p.duration_min !== undefined && `${p.duration_min} min`,
+        p.distance_km !== undefined && `${p.distance_km} km`,
+        p.focus && `Fokus: ${p.focus}`,
+        p.goal && `Ziel: ${p.goal}`,
+        p.exercises?.length && `${p.exercises.length} Übungen`,
       ]);
     }
     case 'body': {
@@ -95,9 +111,39 @@ export function summarize(kind: EntryKind, data: any): string {
 }
 
 export function entryTitle(e: Pick<Entry, 'kind' | 'data'>): string {
-  if (e.kind === 'workout') {
+  if (e.kind === 'workout' || e.kind === 'plan') {
     const w = e.data as WorkoutData;
     return w.sport === 'sonstiges' ? w.sport_label ?? 'Training' : SPORT_LABEL[w.sport];
   }
   return KIND_LABEL[e.kind];
+}
+
+const HEALTH_ORDER = ['sleep', 'hrv', 'resting_hr', 'hr_recovery', 'spo2', 'vo2max', 'steps', 'active_kcal', 'exercise_min', 'weight', 'body_fat', 'workout'];
+
+/** Alle Apple-Health-Werte eines Tages in einer Zeile: "Schlaf 7 h 32 · HRV 58 ms · Ruhepuls 51 · 9.400 Schritte" */
+export function healthLine(entries: Pick<Entry<'health'>, 'data'>[]): string {
+  const byMetric = new Map<string, HealthData>();
+  for (const e of entries) byMetric.set(e.data.metric, e.data);
+  const parts: string[] = [];
+  for (const m of HEALTH_ORDER) {
+    const h = byMetric.get(m);
+    if (!h) continue;
+    switch (m) {
+      case 'sleep':
+        parts.push(`Schlaf ${Math.floor(h.value / 60)} h ${String(h.value % 60).padStart(2, '0')}`);
+        break;
+      case 'steps':
+        parts.push(`${h.value.toLocaleString('de-DE')} Schritte`);
+        break;
+      case 'active_kcal':
+        parts.push(`${h.value} kcal aktiv`);
+        break;
+      case 'exercise_min':
+        parts.push(`${h.value} min Training`);
+        break;
+      default:
+        parts.push(`${HEALTH_LABEL[m] ?? m} ${h.value}${h.unit === '%' ? ' %' : h.unit && m !== 'resting_hr' && m !== 'hr_recovery' ? ' ' + h.unit : ''}`);
+    }
+  }
+  return parts.join(' · ');
 }

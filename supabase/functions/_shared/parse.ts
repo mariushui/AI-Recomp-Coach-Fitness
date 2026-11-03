@@ -68,6 +68,27 @@ export const RESPONSE_SCHEMA = {
               notes: S(),
             },
           },
+          plan: {
+            type: 'OBJECT',
+            properties: {
+              sport: E(SPORTS),
+              sport_label: S(),
+              session_type: E(['training', 'match', 'stunde', 'frei', 'wettkampf']),
+              duration_min: N(),
+              rpe: N('geplante Intensität 1-10'),
+              focus: S(),
+              goal: S('messbares Ziel der Einheit'),
+              distance_km: N(),
+              exercises: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: { exercise: S(), sets: N(), reps: N(), weight_kg: N() },
+                },
+              },
+              notes: S(),
+            },
+          },
           body: {
             type: 'OBJECT',
             properties: { weight_kg: N(), body_fat_pct: N(), waist_cm: N(), bp_systolic: N(), bp_diastolic: N() },
@@ -108,15 +129,25 @@ Regeln:
 - occurred_at: Leite die Zeit aus dem Text ab ("heute morgen", "gestern Abend", "nach dem Training"). Ohne Angabe die aktuelle Zeit verwenden. Immer mit dem Zeitzonen-Offset aus dem Kontext.
 - Mahlzeiten: Zutaten mit Menge auflisten. Protein, kcal, Kohlenhydrate und Fett realistisch schätzen. Protein ist am wichtigsten. confidence = low, wenn Mengen fehlen.
 - Training: sport aus der Liste wählen, sonst "sonstiges" mit sport_label. Bei Tennis und Capoeira focus, high und low erfassen, wenn genannt. Bei Kraft jede Übung mit Sätzen, Wiederholungen, Gewicht in kg. Bei Laufen Distanz und Pace.
+- Vorhaben sind plan, nicht workout: alles in der Zukunft oder mit "will", "plane", "vorgenommen", "morgen", "nächste Woche", "am Donnerstag".
+  occurred_at ist dann der geplante Zeitpunkt. Ohne Uhrzeit 18:00 Uhr. Wochentage beziehen sich auf die kommende Woche ab heute.
+  Ein Wochenplan ergibt einen plan-Eintrag pro Einheit. goal nur, wenn ein messbares Ziel genannt ist.
 - RPE 1-10. Befinden-Skalen 1-5 (5 = viel davon). Übersetze Wörter: "top" = 5, "gut" = 4, "ok" = 3, "mäßig" = 2, "schlecht" = 1.
 - Erfinde nichts. Fehlende Werte weglassen.
 - questions: höchstens 2 kurze Rückfragen, nur wenn eine wichtige Angabe fehlt (z. B. Dauer eines Trainings, Menge einer Proteinquelle). Sonst leer.
 - Alles, was in keine Kategorie passt, als note.
+- Foto einer Mahlzeit: Jedes erkennbare Gericht als meal. Zutaten mit geschätzter Menge in g oder ml auflisten, Tellergröße und Besteck als Maßstab nehmen.
+  Protein, kcal, Kohlenhydrate und Fett aus den geschätzten Mengen berechnen. Öl, Butter und Soßen mitschätzen, sie liefern viel Fett.
+  confidence höchstens medium, low bei verdeckten Zutaten oder unklaren Mengen. Text zum Foto hat Vorrang vor deiner Schätzung (z. B. "250 g Reis").
+  Ohne Zeitangabe im Text: occurred_at = jetzt. Ist kein Essen zu sehen, keine Einträge und eine kurze Rückfrage.
 - Antworte auf Deutsch.`;
 }
 
-export function buildUserPrompt(text: string, nowIso: string, timeZone: string): string {
-  return `Kontext: Jetzt ist ${nowIso} (Zeitzone ${timeZone}).\n\nNotiz:\n${text}`;
+export function buildUserPrompt(text: string, nowIso: string, timeZone: string, hasImage = false): string {
+  const context = `Kontext: Jetzt ist ${nowIso} (Zeitzone ${timeZone}).`;
+  if (!hasImage) return `${context}\n\nNotiz:\n${text}`;
+  const note = text.trim() ? `\n\nText zum Foto:\n${text}` : '\n\nKein Text zum Foto.';
+  return `${context}\n\nDas Foto zeigt eine Mahlzeit. Schätze Zutaten, Mengen und Makros.${note}`;
 }
 
 const hasOffset = (s: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(s);

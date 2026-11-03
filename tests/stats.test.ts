@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dailyStats, movingAverage, weeklySportMinutes } from '../lib/stats';
+import { average, bmi, dailyStats, movingAverage, weeklyAverages, weeklySportMinutes } from '../lib/stats';
 import type { Entry } from '../supabase/functions/_shared/domain';
 
 const e = (kind: Entry['kind'], at: string, data: any): Entry => ({ id: at + kind, user_id: 'u', kind, occurred_at: at, source: 'manual', data });
@@ -45,5 +45,40 @@ describe('weeklySportMinutes', () => {
       { week: '2026-11-02', tennis: 150, laufen: 40 },
       { week: '2026-11-09', capoeira: 75 },
     ]);
+  });
+});
+
+describe('Makros, Magermasse, Wochenmittel', () => {
+  const entries = [
+    e('body', '2026-11-02T07:00:00+01:00', { weight_kg: 82, body_fat_pct: 18 }),
+    e('meal', '2026-11-02T08:00:00+01:00', { description: 'a', protein_g: 40, carbs_g: 80.4, fat_g: 20 }),
+    e('meal', '2026-11-02T13:00:00+01:00', { description: 'b', protein_g: 50, carbs_g: 100, fat_g: 25.2 }),
+    e('meal', '2026-11-03T13:00:00+01:00', { description: 'c', protein_g: 110 }),
+    e('meal', '2026-11-10T13:00:00+01:00', { description: 'd', protein_g: 150 }),
+  ];
+  const s = dailyStats(entries, new Date(2026, 10, 2), new Date(2026, 10, 11));
+  it('summiert Kohlenhydrate und Fett gerundet', () => {
+    expect(s[0].carbs).toBe(180);
+    expect(s[0].fat).toBe(45);
+  });
+  it('berechnet magere Körpermasse', () => expect(s[0].leanMass).toBe(67.2));
+  it('Wochenmittel nur über Tage mit Wert', () => {
+    expect(weeklyAverages(s, ['protein', 'carbs'])).toEqual([
+      { week: '2026-11-02', protein: 100, carbs: 180 },
+      { week: '2026-11-09', protein: 150 },
+    ]);
+  });
+  it('Durchschnitt über den Zeitraum', () => expect(average(s, 'protein')).toBe(117));
+});
+
+describe('Fettmasse und BMI', () => {
+  it('Fettmasse aus Gewicht und KFA', () => {
+    const s = dailyStats([e('body', '2026-11-02T07:00:00+01:00', { weight_kg: 82, body_fat_pct: 18 })], new Date(2026, 10, 2), new Date(2026, 10, 3));
+    expect(s[0].fatMass).toBe(14.8);
+    expect((s[0].leanMass ?? 0) + (s[0].fatMass ?? 0)).toBeCloseTo(82, 5);
+  });
+  it('BMI', () => {
+    expect(bmi(82, 182)).toBe(24.8);
+    expect(bmi(82, null)).toBeUndefined();
   });
 });

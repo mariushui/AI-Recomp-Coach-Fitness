@@ -9,6 +9,10 @@
 //     "resting_hr": { "values": "...", "dates": "..." },
 //     "hrv":        { "values": "...", "dates": "..." },
 //     "vo2max":     { "values": "...", "dates": "..." },
+//     "spo2":       { "values": "0,97\n0,95", "dates": "..." },
+//     "steps":      { "values": "...", "dates": "...", "sources": "Apple Watch von Marius\niPhone" },
+//     "active_kcal": { "values": "...", "dates": "...", "sources": "..." },   (Bewegen-Ring)
+//     "exercise_min": { "values": "...", "dates": "...", "sources": "..." },  (Trainieren-Ring)
 //     "sleep":      { "values": "Kern\nTief\n...", "starts": "...", "ends": "..." }
 //   }
 // }
@@ -29,7 +33,7 @@ export interface HealthParseResult {
   warnings: string[];
 }
 
-type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max';
+type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2' | 'hr_recovery';
 
 const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' | 'mean'; min: number; max: number }> = {
   weight: { unit: 'kg', pick: 'first', min: 25, max: 300 }, // erste Messung des Tages = morgens
@@ -37,6 +41,8 @@ const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' 
   resting_hr: { unit: 'bpm', pick: 'last', min: 25, max: 150 },
   hrv: { unit: 'ms', pick: 'mean', min: 5, max: 300 },
   vo2max: { unit: 'ml/kg/min', pick: 'last', min: 10, max: 95 },
+  spo2: { unit: '%', pick: 'mean', min: 70, max: 100 },
+  hr_recovery: { unit: 'bpm', pick: 'last', min: 3, max: 100 }, // Cardio-Erholung: Pulsabfall 1 min nach dem Training
 };
 
 /** Liest eine Liste aus Text (Zeilen) oder Array. */
@@ -102,7 +108,7 @@ function parsePointMetric(metric: PointMetric, block: any, warnings: string[]): 
       return;
     }
     // Körperfett kommt je nach Kurzbefehl als 0,18 oder 18
-    if (metric === 'body_fat' && v > 0 && v < 1) v = v * 100;
+    if ((metric === 'body_fat' || metric === 'spo2') && v > 0 && v <= 1) v = v * 100;
     if (v < cfg.min || v > cfg.max) {
       warnings.push(`${metric}: Wert ${v} außerhalb des plausiblen Bereichs. Übersprungen.`);
       return;
@@ -216,6 +222,51 @@ function parseSleep(block: any, warnings: string[]): HealthRow[] {
   return rows;
 }
 
+/**
+ * Schritte: iPhone und Watch zählen parallel. Pro Tag wird je Quelle summiert
+ * und die Quelle mit den meisten Schritten genommen. Ohne Quellenangabe wird alles summiert.
+ */
+function parseSteps(block: any, warnings: string[]): HealthRow[] {
+  return parseSummed('steps', 'Schritte', block, warnings);
+}
+
+/** Tagessumme je Quelle, die größte Quelle zählt (Schritte, aktive Kalorien, Trainingsminuten). */
+function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: string, block: any, warnings: string[]): HealthRow[] {
+  const values = toList(block?.values);
+  const dates = toList(block?.dates);
+  const sources = toList(block?.sources);
+  if (values.length === 0) return [];
+  if (values.length !== dates.length) {
+    warnings.push(`${metric}: ${values.length} Werte, aber ${dates.length} Datumsangaben. Übersprungen.`);
+    return [];
+  }
+  const withSources = sources.length === values.length;
+  if (!withSources) warnings.push(`${metric}: keine Quellen mitgeschickt, iPhone und Watch werden womöglich doppelt gezählt.`);
+  const perDay = new Map<string, { bySource: Map<string, number>; lastIso: string; lastMs: number }>();
+  values.forEach((raw, i) => {
+    const v = parseNumber(raw);
+    const d = parseDate(dates[i]);
+    if (v === undefined || !d || v < 0) {
+      warnings.push(`${metric}: Zeile ${i + 1} nicht lesbar.`);
+      return;
+    }
+    const day = perDay.get(d.day) ?? { bySource: new Map(), lastIso: d.iso, lastMs: d.ms };
+    const src = withSources ? sources[i] : 'alle';
+    day.bySource.set(src, (day.bySource.get(src) ?? 0) + v);
+    if (d.ms > day.lastMs) {
+      day.lastMs = d.ms;
+      day.lastIso = d.iso;
+    }
+    perDay.set(d.day, day);
+  });
+  const rows: HealthRow[] = [];
+  for (const [day, info] of perDay) {
+    const value = Math.round(Math.max(...info.bySource.values()));
+    rows.push({ metric, day, occurred_at: info.lastIso, external_id: `${metric}:${day}`, data: { metric, value, unit } });
+  }
+  return rows;
+}
+
 export function parseHealthPayload(body: any): HealthParseResult {
   const warnings: string[] = [];
   const metrics = body?.metrics;
@@ -227,8 +278,11 @@ export function parseHealthPayload(body: any): HealthParseResult {
     if (metrics[m]) rows.push(...parsePointMetric(m, metrics[m], warnings));
   }
   if (metrics.sleep) rows.push(...parseSleep(metrics.sleep, warnings));
+  if (metrics.steps) rows.push(...parseSteps(metrics.steps, warnings));
+  if (metrics.active_kcal) rows.push(...parseSummed('active_kcal', 'kcal', metrics.active_kcal, warnings));
+  if (metrics.exercise_min) rows.push(...parseSummed('exercise_min', 'min', metrics.exercise_min, warnings));
   for (const k of Object.keys(metrics)) {
-    if (!(k in POINT_METRICS) && k !== 'sleep') warnings.push(`Unbekannte Kennzahl "${k}" ignoriert.`);
+    if (!(k in POINT_METRICS) && !['sleep', 'steps', 'active_kcal', 'exercise_min'].includes(k)) warnings.push(`Unbekannte Kennzahl "${k}" ignoriert.`);
   }
   return { rows, warnings };
 }

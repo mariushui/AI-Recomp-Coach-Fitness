@@ -10,7 +10,7 @@ Einmalig, etwa 30 Minuten. Du brauchst: Mac mit Terminal, GitHub-Zugang, einen G
 
 ## 2. Datenbank-Schema einspielen
 
-**SQL Editor > New query**, Inhalt von `supabase/migrations/20261103000000_init.sql` einfügen, **Run**.
+**SQL Editor > New query**, nacheinander alle Dateien aus `supabase/migrations/` in Reihenfolge der Dateinamen einfügen und jeweils **Run**.
 
 ## 3. Login einstellen
 
@@ -60,7 +60,13 @@ supabase functions deploy parse-log
 supabase functions deploy health-ingest --no-verify-jwt
 ```
 
-Optional: `supabase secrets set GEMINI_MODEL=...`, falls du ein anderes Gemini-Modell willst. Standard ist `gemini-2.5-flash`.
+```bash
+supabase functions deploy health-export --no-verify-jwt
+```
+
+Nach jeder Änderung an `supabase/functions/` die betroffene Funktion erneut deployen.
+
+Optional: `supabase secrets set GEMINI_MODEL=...`, falls du ein anderes Gemini-Modell willst. Standard ist `gemini-3.8-flash`.
 
 ## 5. Lokal starten
 
@@ -90,7 +96,7 @@ App läuft auf `http://localhost:3000`.
 
 ## 7. Apple Health verbinden
 
-In der App unter **Mehr > Apple Health** einen Token erzeugen. Dann `docs/KURZBEFEHL.md` folgen.
+In der App unter **Einstellungen > Apple Health** einen Token erzeugen. Dann `docs/KURZBEFEHL.md` folgen.
 
 ## 8. Alte Daten übernehmen
 
@@ -101,7 +107,7 @@ So holst du sie: In der alten App am Mac die Entwicklerkonsole öffnen (Safari: 
 copy(localStorage.getItem('ai_fitness_coach_history_v2'))
 ```
 
-Dann in der neuen App unter **Mehr > Alte Daten übernehmen** einfügen. Doppelte Einträge werden übersprungen.
+Dann in der neuen App unter **Einstellungen > Alte Daten übernehmen** einfügen. Doppelte Einträge werden übersprungen.
 
 ## Freunde einladen
 

@@ -10,11 +10,20 @@ export interface DayStats {
   waist?: number;
   protein?: number;
   kcal?: number;
+  carbs?: number;
+  fat?: number;
+  leanMass?: number; // magere Körpermasse in kg = Gewicht x (1 - KFA)
+  fatMass?: number; // Fettmasse in kg = Gewicht x KFA
   trainingMin?: number;
   sleepH?: number;
   hrv?: number;
   restingHr?: number;
   vo2max?: number;
+  spo2?: number;
+  hrRecovery?: number;
+  steps?: number;
+  activeKcal?: number;
+  exerciseMin?: number;
   entries: number;
 }
 
@@ -49,6 +58,8 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         const m = e.data as MealData;
         s.protein = add(s.protein, m.protein_g);
         s.kcal = add(s.kcal, m.kcal);
+        s.carbs = add(s.carbs, m.carbs_g);
+        s.fat = add(s.fat, m.fat_g);
         break;
       }
       case 'workout': {
@@ -64,6 +75,11 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         if (h.metric === 'hrv') s.hrv = h.value;
         if (h.metric === 'resting_hr') s.restingHr = h.value;
         if (h.metric === 'vo2max') s.vo2max = h.value;
+        if (h.metric === 'spo2') s.spo2 = h.value;
+        if (h.metric === 'hr_recovery') s.hrRecovery = h.value;
+        if (h.metric === 'steps') s.steps = h.value;
+        if (h.metric === 'active_kcal') s.activeKcal = h.value;
+        if (h.metric === 'exercise_min') s.exerciseMin = h.value;
         break;
       }
     }
@@ -71,6 +87,11 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
   for (const s of days.values()) {
     if (s.weight === undefined && healthWeight.has(s.day)) s.weight = healthWeight.get(s.day);
     if (s.bodyFat === undefined && healthFat.has(s.day)) s.bodyFat = healthFat.get(s.day);
+    if (s.weight !== undefined && s.bodyFat !== undefined) {
+      s.leanMass = Math.round(s.weight * (1 - s.bodyFat / 100) * 10) / 10;
+      s.fatMass = Math.round(s.weight * (s.bodyFat / 100) * 10) / 10;
+    }
+    for (const k of ['protein', 'kcal', 'carbs', 'fat'] as const) if (s[k] !== undefined) s[k] = Math.round(s[k]!);
   }
   return [...days.values()];
 }
@@ -99,4 +120,39 @@ export function weeklySportMinutes(entries: Entry[]): WeekSport[] {
     weeks.set(k, row);
   }
   return [...weeks.values()].sort((a, b) => a.week.localeCompare(b.week));
+}
+
+/** Wochenmittel (Montag als Schlüssel) über Tage mit Wert. Tage ohne Eintrag zählen nicht mit. */
+export function weeklyAverages<K extends keyof DayStats>(days: DayStats[], keys: K[]): ({ week: string } & Partial<Record<K, number>>)[] {
+  const weeks = new Map<string, { week: string; sums: Record<string, number>; counts: Record<string, number> }>();
+  for (const d of days) {
+    const wk = weekKey(new Date(d.day + 'T12:00:00'));
+    const w = weeks.get(wk) ?? { week: wk, sums: {}, counts: {} };
+    for (const k of keys) {
+      const v = d[k];
+      if (typeof v !== 'number') continue;
+      w.sums[k as string] = (w.sums[k as string] ?? 0) + v;
+      w.counts[k as string] = (w.counts[k as string] ?? 0) + 1;
+    }
+    weeks.set(wk, w);
+  }
+  return [...weeks.values()]
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((w) => {
+      const row: any = { week: w.week };
+      for (const k of keys) if (w.counts[k as string]) row[k] = Math.round((w.sums[k as string] / w.counts[k as string]) * 10) / 10;
+      return row;
+    });
+}
+
+/** Mittelwert einer Kennzahl über Tage mit Wert */
+export function average(days: DayStats[], key: keyof DayStats): number | undefined {
+  const v = days.map((d) => d[key]).filter((x): x is number => typeof x === 'number');
+  return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : undefined;
+}
+
+/** BMI = Gewicht / Größe in Metern zum Quadrat */
+export function bmi(weightKg: number | undefined, heightCm: number | null | undefined): number | undefined {
+  if (!weightKg || !heightCm) return undefined;
+  return Math.round((weightKg / (heightCm / 100) ** 2) * 10) / 10;
 }

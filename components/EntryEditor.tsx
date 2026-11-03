@@ -5,9 +5,11 @@ import {
   SPORT_LABEL,
   SPORT_CATEGORY,
   type EntryKind,
+  type EntrySource,
   type StrengthSet,
 } from '../supabase/functions/_shared/domain';
-import { KIND_ICON, summarize } from '../lib/format';
+import { summarize } from '../lib/format';
+import { EntryIcon, Icons } from './icons';
 import { fromInputValue, toInputValue } from '../lib/time';
 import { Card, NumberField, ScaleField, SelectField, TextField, Label } from './ui';
 
@@ -16,6 +18,8 @@ export interface Draft {
   occurred_at: string;
   data: any;
   manual?: boolean; // ohne KI angelegt
+  source?: EntrySource; // wie der Entwurf entstanden ist, beim Erkennen festgehalten
+  raw_text?: string | null;
 }
 
 interface Props {
@@ -23,9 +27,12 @@ interface Props {
   onChange: (d: Draft) => void;
   onRemove?: () => void;
   defaultOpen?: boolean;
+  hideTime?: boolean; // im Wochenplan: Tag und Uhrzeit stehen außerhalb
+  header?: React.ReactNode; // ersetzt die Zeitangabe im Kopf
+  extra?: React.ReactNode; // zusätzliche Felder oben im aufgeklappten Bereich
 }
 
-const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false }) => {
+const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false, hideTime = false, header, extra }) => {
   const [open, setOpen] = useState(defaultOpen);
   const d = draft.data ?? {};
   const set = (key: string, value: unknown) => {
@@ -40,10 +47,14 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
   return (
     <Card className="!p-0 overflow-hidden">
       <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-start gap-3 p-4 text-left">
-        <span className="text-xl leading-none mt-0.5">{KIND_ICON[draft.kind]}</span>
+        <EntryIcon kind={draft.kind} data={d} className="text-cyber-purple shrink-0 mt-0.5" />
         <span className="flex-1 min-w-0">
           <span className="block text-xs font-bold uppercase tracking-wider text-cyber-purple">
-            {KIND_LABEL[draft.kind]} · {new Date(draft.occurred_at).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+            {header ?? (
+              <>
+                {KIND_LABEL[draft.kind]} · {new Date(draft.occurred_at).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+              </>
+            )}
           </span>
           <span className="block text-sm text-slate-200 mt-0.5 break-words">
             {summarize(draft.kind, d) || <em className="text-slate-500">leer</em>}
@@ -54,6 +65,8 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
 
       {open && (
         <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+          {extra}
+          {!hideTime && (
           <label className="block">
             <Label>Zeitpunkt</Label>
             <input
@@ -63,6 +76,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
               onChange={(e) => e.target.value && onChange({ ...draft, occurred_at: fromInputValue(e.target.value) })}
             />
           </label>
+          )}
 
           {draft.kind === 'meal' && (
             <>
@@ -93,7 +107,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
             </>
           )}
 
-          {draft.kind === 'workout' && (
+          {(draft.kind === 'workout' || draft.kind === 'plan') && (
             <>
               <div className="grid grid-cols-2 gap-3">
                 <SelectField
@@ -119,9 +133,18 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
               {d.sport === 'sonstiges' && <TextField label="Welcher Sport" value={d.sport_label} onChange={(v) => set('sport_label', v)} />}
               <div className="grid grid-cols-2 gap-3">
                 <NumberField label="Dauer" unit="min" value={d.duration_min} onChange={(v) => set('duration_min', v)} />
-                <NumberField label="Belastung RPE" unit="1-10" value={d.rpe} onChange={(v) => set('rpe', v)} />
+                <NumberField label={draft.kind === 'plan' ? 'Intensität' : 'Belastung RPE'} unit="1-10" value={d.rpe} onChange={(v) => set('rpe', v)} />
               </div>
-              {SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'skill' && (
+              {draft.kind === 'plan' && (
+                <>
+                  <TextField label="Fokus / woran arbeiten" value={d.focus} onChange={(v) => set('focus', v)} />
+                  <TextField label="Ziel" value={d.goal} onChange={(v) => set('goal', v)} placeholder="z. B. 8 km unter 5:45 min/km" />
+                  {SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'endurance' && (
+                    <NumberField label="Distanz" unit="km" step={0.1} value={d.distance_km} onChange={(v) => set('distance_km', v)} />
+                  )}
+                </>
+              )}
+              {draft.kind === 'workout' && SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'skill' && (
                 <>
                   <TextField label="Fokus / woran gearbeitet" value={d.focus} onChange={(v) => set('focus', v)} />
                   <TextField label="High des Tages" value={d.high} onChange={(v) => set('high', v)} />
@@ -134,7 +157,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
                   )}
                 </>
               )}
-              {SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'endurance' && (
+              {draft.kind === 'workout' && SPORT_CATEGORY[(d.sport ?? 'sonstiges') as keyof typeof SPORT_CATEGORY] === 'endurance' && (
                 <div className="grid grid-cols-3 gap-3">
                   <NumberField label="Distanz" unit="km" step={0.1} value={d.distance_km} onChange={(v) => set('distance_km', v)} />
                   <TextField label="Pace" value={d.avg_pace} onChange={(v) => set('avg_pace', v)} placeholder="5:30" />
@@ -219,8 +242,8 @@ const ExerciseList: React.FC<{ value: StrengthSet[]; onChange: (v: StrengthSet[]
             <input className={cell} inputMode="numeric" value={x.sets ?? ''} placeholder="S" onChange={(e) => upd(i, { sets: n(e.target.value) })} />
             <input className={cell} inputMode="numeric" value={x.reps ?? ''} placeholder="W" onChange={(e) => upd(i, { reps: n(e.target.value) })} />
             <input className={cell} inputMode="decimal" value={x.weight_kg ?? ''} placeholder="kg" onChange={(e) => upd(i, { weight_kg: n(e.target.value) })} />
-            <button type="button" className="text-slate-500" onClick={() => onChange(value.filter((_, j) => j !== i))}>
-              ✕
+            <button type="button" className="text-slate-500" onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label="Übung entfernen">
+              <Icons.Close size={16} />
             </button>
           </div>
         ))}
