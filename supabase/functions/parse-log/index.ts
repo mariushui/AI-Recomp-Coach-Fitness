@@ -10,7 +10,7 @@ import { RESPONSE_SCHEMA, buildSystemPrompt, buildUserPrompt, normalizeParseResu
 import { checkImage, type ImageInput } from '../_shared/image.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
-const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.8-flash';
 const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? '60');
 const MAX_CHARS = 4000;
 

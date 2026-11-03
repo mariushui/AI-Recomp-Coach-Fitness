@@ -60,7 +60,7 @@ supabase functions deploy parse-log
 supabase functions deploy health-ingest --no-verify-jwt
 ```
 
-Optional: `supabase secrets set GEMINI_MODEL=...`, falls du ein anderes Gemini-Modell willst. Standard ist `gemini-2.5-flash`.
+Optional: `supabase secrets set GEMINI_MODEL=...`, falls du ein anderes Gemini-Modell willst. Standard ist `gemini-3.8-flash`.
 
 ## 5. Lokal starten
 
