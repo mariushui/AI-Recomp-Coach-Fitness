@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
   // Diagnose: nur Struktur und Längen, keine Werte.
   const shape = (v: unknown): unknown =>
     Array.isArray(v) ? `array(${v.length})` : typeof v === 'string' ? `string(${v.length})` : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shape(x)])) : typeof v;
-  console.log('ingest shape', JSON.stringify(shape(body)), 'rows', rows.length, 'warnings', JSON.stringify(warnings));
+  const sampleDate = String((body as any)?.metrics?.weight?.dates ?? '').split('\n')[0].slice(0, 40);
+  console.log('ingest shape', JSON.stringify(shape(body)), 'rows', rows.length, 'firstDate', JSON.stringify(sampleDate), 'warnings', JSON.stringify(warnings));
   const dry = new URL(req.url).searchParams.get('dry') === '1';
   if (dry) return json({ ok: true, dry: true, rows, warnings });
 
