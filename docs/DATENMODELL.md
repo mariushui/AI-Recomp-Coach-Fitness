@@ -23,7 +23,7 @@ Makros sind KI-Schätzungen. Protein ist der wichtigste Wert.
 `ergaenzung` = Kreatin, Vitamine, Omega-3 usw. als `items` (name, amount), meist ohne Makros. Mikronährstoffe werden nicht geschätzt.
 Aus einem Foto (Kamera oder Mediathek) schätzt die KI Zutaten, Mengen und Makros. Das Foto selbst wird nicht gespeichert, nur die bestätigten Werte mit `source = photo`.
 
-**workout** (Training): `sport` (tennis, laufen, capoeira, kraft, rad, schwimmen, mobility, sonstiges), `sport_label`, `session_type` (training, stunde, match, wettkampf, frei), `duration_min`, `rpe` (1-10).
+**workout** (Training): `sport` (tennis, laufen, capoeira, kraft, rad, schwimmen, mobility, sonstiges), `sport_label` (nur bei sonstiges), `session_type` (training, stunde, match, wettkampf, frei), `duration_min`, `rpe` (1-10).
 Technik-Sport (Tennis, Capoeira): `focus`, `high`, `low`, `result`, `opponent`.
 Ausdauer: `distance_km`, `avg_pace`, `avg_hr`.
 Kraft: `exercises[]` mit `exercise`, `sets`, `reps`, `weight_kg`, `rpe`.

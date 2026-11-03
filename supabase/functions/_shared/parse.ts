@@ -12,7 +12,18 @@ export interface ParsedEntry<K extends EntryKind = EntryKind> {
 export interface ParseResult {
   entries: ParsedEntry[];
   questions: string[];
+  model?: string; // welches Gemini-Modell geantwortet hat
+  schema?: boolean; // ob das strenge Antwortschema aktiv war
 }
+
+/** KI-Text darf nicht ausufern. Nutzereingaben bleiben unangetastet, der Deckel gilt nur hier. */
+const MAX_AI_TEXT = 400;
+const capStrings = (v: unknown): unknown => {
+  if (typeof v === 'string') return v.slice(0, MAX_AI_TEXT);
+  if (Array.isArray(v)) return v.map(capStrings);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, capStrings(x)]));
+  return v;
+};
 
 const S = (description?: string) => ({ type: 'STRING', ...(description ? { description } : {}) });
 const N = (description?: string) => ({ type: 'NUMBER', ...(description ? { description } : {}) });
@@ -175,13 +186,13 @@ export function normalizeParseResult(raw: any, nowIso: string): ParseResult {
   for (const e of list) {
     const kind = e?.kind as EntryKind;
     if (!ENTRY_KINDS.includes(kind) || kind === 'health') continue;
-    const data = normalizeData(kind, e[kind]);
+    const data = normalizeData(kind, capStrings(e[kind]));
     if (!data) continue;
     const at = typeof e.occurred_at === 'string' && hasOffset(e.occurred_at) ? e.occurred_at : nowIso;
     entries.push({ kind, occurred_at: at, data });
   }
   const questions = Array.isArray(raw?.questions)
-    ? raw.questions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 2)
+    ? raw.questions.filter((q: unknown) => typeof q === 'string' && q.trim()).slice(0, 2).map((q: string) => q.slice(0, MAX_AI_TEXT))
     : [];
   return { entries, questions };
 }

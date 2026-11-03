@@ -220,9 +220,8 @@ const num = (v: unknown): number | undefined => {
   return undefined;
 };
 
-const MAX_TEXT = 300;
 const str = (v: unknown): string | undefined =>
-  typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, MAX_TEXT) : undefined;
+  typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
 
 const scale = (v: unknown): number | undefined => {
   const n = num(v);

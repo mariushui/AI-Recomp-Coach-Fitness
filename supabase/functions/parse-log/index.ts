@@ -1,7 +1,9 @@
 // POST /functions/v1/parse-log
 // Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone, image?: { mime, data (Base64) } }
 // Mit image wertet die KI ein Essensfoto aus. Das Foto wird nicht gespeichert.
-// Antwort: { entries: ParsedEntry[], questions: string[] }
+// Antwort: { entries: ParsedEntry[], questions: string[], model, schema }
+// Diagnose (nur angemeldet): GET ?models=1 listet Modelle; ?model=NAME erzwingt eins; ?schema=0|1 schaltet das Antwortschema.
+// Secrets: GEMINI_API_KEY (Pflicht), GEMINI_MODELS oder GEMINI_MODEL (Reihenfolge), GEMINI_SCHEMA=1, AI_DAILY_LIMIT.
 // Speichert nichts. Die App zeigt das Ergebnis zur Bestätigung und speichert dann selbst.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -24,7 +26,8 @@ const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? '60');
 const USE_SCHEMA_DEFAULT = Deno.env.get('GEMINI_SCHEMA') === '1';
 const MAX_CHARS = 4000;
 // Unter dem Zeitlimit der Edge Function (150 s), damit die App eine klare Meldung bekommt statt eines Abbruchs.
-const GEMINI_TIMEOUT_MS = 30_000; // je Modell, bei 4 Modellen bleibt es unter dem Limit der Function
+const GEMINI_TIMEOUT_MS = 30_000; // je Modell
+const TOTAL_BUDGET_MS = 125_000; // für die ganze Kette, damit die App eine Meldung statt eines Abbruchs bekommt
 const BUSY = 'Die KI ist gerade überlastet. Versuch es in ein paar Minuten nochmal.';
 // Merkt sich das zuletzt funktionierende Ersatzmodell, solange die Function warm ist. Spart die Fehlversuche an überlasteten Modellen.
 const PREFER_MS = 15 * 60_000;
@@ -100,16 +103,20 @@ Deno.serve(async (req) => {
 
   // Diagnose: ?model=NAME erzwingt ein Modell (nur angemeldet), zum Vergleichen der Qualität.
   const forced = new URL(req.url).searchParams.get('model');
+  if (forced && !/^[A-Za-z0-9._-]{1,80}$/.test(forced)) return json({ error: 'Ungültiger Modellname' }, 400);
   const remembered = preferred && preferred.until > Date.now() ? preferred.model : null;
   const models = forced ? [forced] : remembered ? [remembered, ...GEMINI_MODELS.filter((m) => m !== remembered)] : GEMINI_MODELS;
   let res: Response | null = null;
   let lastStatus = 0;
   let used = '';
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
   for (const model of models) {
+    const left = deadline - Date.now();
+    if (left < 5_000) break;
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        signal: AbortSignal.timeout(Math.min(GEMINI_TIMEOUT_MS, left)),
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
         body: payload,
       });
@@ -118,7 +125,8 @@ Deno.serve(async (req) => {
         used = model;
         if (model !== GEMINI_MODELS[0]) {
           console.log('Gemini fallback', model);
-          if (!forced) preferred = { model, until: Date.now() + PREFER_MS };
+          // Frist nur beim Ausweichen setzen, nicht verlängern: nach 15 Minuten kommt das Hauptmodell wieder zuerst dran.
+          if (!forced && preferred?.model !== model) preferred = { model, until: Date.now() + PREFER_MS };
         } else {
           preferred = null;
         }
