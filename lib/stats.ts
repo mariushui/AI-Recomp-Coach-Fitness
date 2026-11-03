@@ -21,6 +21,8 @@ export interface DayStats {
   vo2max?: number;
   spo2?: number;
   steps?: number;
+  activeKcal?: number;
+  exerciseMin?: number;
   entries: number;
 }
 
@@ -74,6 +76,8 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         if (h.metric === 'vo2max') s.vo2max = h.value;
         if (h.metric === 'spo2') s.spo2 = h.value;
         if (h.metric === 'steps') s.steps = h.value;
+        if (h.metric === 'active_kcal') s.activeKcal = h.value;
+        if (h.metric === 'exercise_min') s.exerciseMin = h.value;
         break;
       }
     }

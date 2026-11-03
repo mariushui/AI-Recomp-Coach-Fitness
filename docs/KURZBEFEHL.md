@@ -63,6 +63,17 @@ iPhone und Watch zählen Schritte parallel. Damit nichts doppelt zählt, schickt
 3. **Details von Health-Samples abrufen**: **Startdatum** → **Datum formatieren** ISO 8601 mit Uhrzeit → **Variable festlegen** `TD`
 4. **Details von Health-Samples abrufen**: **Quelle** (Source) → **Variable festlegen** `TQ`
 
+### Bausteine Aktivitätsringe
+
+Gleich gebaut wie Schritte, also mit Quelle:
+
+| Ring | Typ in Health | Variablen |
+|---|---|---|
+| Bewegen | Aktive Energie (Active Energy) | `AW`, `AD`, `AQ` |
+| Trainieren | Trainingsminuten (Exercise Minutes) | `EW`, `ED`, `EQ` |
+
+Den Ring „Stehen“ lassen wir weg.
+
 ### Baustein Schlaf
 
 1. **Health-Samples suchen**: Typ **Schlafanalyse** (Sleep Analysis), Startdatum in den letzten **3 Tagen**, sortiert nach Startdatum, älteste zuerst
@@ -88,6 +99,8 @@ iPhone und Watch zählen Schritte parallel. Damit nichts doppelt zählt, schickt
    | `vo2max` | Wörterbuch | `values` = `VW`, `dates` = `VD` |
    | `spo2` | Wörterbuch | `values` = `BW`, `dates` = `BD` |
    | `steps` | Wörterbuch | `values` = `TW`, `dates` = `TD`, `sources` = `TQ` |
+   | `active_kcal` | Wörterbuch | `values` = `AW`, `dates` = `AD`, `sources` = `AQ` |
+   | `exercise_min` | Wörterbuch | `values` = `EW`, `dates` = `ED`, `sources` = `EQ` |
    | `sleep` | Wörterbuch | `values` = `SW`, `starts` = `SS`, `ends` = `SE` |
 
    Wichtig: Die Variablen in ein **Text**-Feld einsetzen. Shortcuts schreibt Listen dann zeilenweise, genau so erwartet es der Server.

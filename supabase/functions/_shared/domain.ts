@@ -135,6 +135,7 @@ export const HEALTH_METRICS = [
   'spo2',
   'steps',
   'active_kcal',
+  'exercise_min',
   'sleep',
   'workout',
 ] as const;
