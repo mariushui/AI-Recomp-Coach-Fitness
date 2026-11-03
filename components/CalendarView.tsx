@@ -86,6 +86,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
   const healthEntries = dayEntries.filter((e): e is Entry<'health'> => e.kind === 'health');
   const stats = dailyStats(entries, day, addDays(day, 1))[0];
   const [proteinGoal, setProteinGoal] = useState<number | null>(null);
+  const [healthOpen, setHealthOpen] = useState(false);
   useEffect(() => {
     loadProfile().then((p) => setProteinGoal(p.protein_goal_g ?? null)).catch(() => undefined);
   }, [refreshKey]);
@@ -385,12 +386,26 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
               ),
             )}
           {healthEntries.length > 0 && (
-            <Card className="flex gap-3 items-start">
-              <EntryIcon kind="health" className="text-cyber-purple shrink-0 mt-0.5" />
-              <span className="flex-1 min-w-0">
-                <span className="text-xs font-bold text-cyber-purple uppercase tracking-wider">Apple Health</span>
-                <span className="block text-sm text-slate-200 mt-0.5 break-words">{healthLine(healthEntries)}</span>
-              </span>
+            <Card className="space-y-2">
+              <button type="button" onClick={() => setHealthOpen(!healthOpen)} aria-expanded={healthOpen} className="w-full text-left flex gap-3 items-start">
+                <EntryIcon kind="health" className="text-cyber-purple shrink-0 mt-0.5" />
+                <span className="flex-1 min-w-0">
+                  <span className="text-xs font-bold text-cyber-purple uppercase tracking-wider">Apple Health</span>
+                  <span className="block text-sm text-slate-200 mt-0.5 break-words">{healthLine(healthEntries)}</span>
+                </span>
+                <Icons.Right size={16} className={`text-slate-600 shrink-0 mt-1 transition-transform ${healthOpen ? 'rotate-90' : ''}`} />
+              </button>
+              {healthOpen &&
+                healthEntries.map((e) =>
+                  editId === e.id ? (
+                    <div key={e.id}>{editorBlock}</div>
+                  ) : (
+                    <button key={e.id} onClick={() => startEdit(e)} className="w-full text-left flex justify-between gap-2 rounded-lg bg-cyber-black/60 px-3 py-2 text-sm">
+                      <span className="text-slate-200">{summarize('health', e.data)}</span>
+                      <span className="text-slate-500 text-xs shrink-0">{formatTime(e.occurred_at)}</span>
+                    </button>
+                  ),
+                )}
             </Card>
           )}
         </div>

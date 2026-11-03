@@ -33,7 +33,9 @@ export async function endSlots(ids: string[]): Promise<void> {
  * Unabhängig vom Zeitraum, damit eine in eine andere Woche verschobene Einheit am Ursprungstag nicht erneut erscheint.
  */
 export async function listSlotOverrideIds(): Promise<string[]> {
-  const { data, error } = await supabase.from('entries').select('external_id').eq('kind', 'plan').like('external_id', 'slot:%');
+  // Begrenzt auf 1 Jahr zurück, damit die Liste unter dem Supabase-Limit von 1.000 Zeilen bleibt.
+  const since = addDays(new Date(), -365).toISOString();
+  const { data, error } = await supabase.from('entries').select('external_id').eq('kind', 'plan').like('external_id', 'slot:%').gte('occurred_at', since);
   if (error) throw error;
   return ((data ?? []) as { external_id: string }[]).map((r) => r.external_id);
 }

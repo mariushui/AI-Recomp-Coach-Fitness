@@ -84,12 +84,19 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
 
   const saveName = () =>
     run(async () => {
+      const p = proteinGoal === undefined ? null : Math.round(proteinGoal);
+      const k = kcalGoal === undefined ? null : Math.round(kcalGoal);
+      if (p !== null && (p < 30 || p > 400)) throw new Error('Protein-Ziel bitte zwischen 30 und 400 g.');
+      if (k !== null && (k < 800 || k > 6000)) throw new Error('Kalorien-Ziel bitte zwischen 800 und 6.000 kcal.');
+      if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
       await saveProfile(session.user.id, {
         display_name: name ?? null,
         height_cm: height ?? null,
-        protein_goal_g: proteinGoal ?? null,
-        kcal_goal: kcalGoal ?? null,
+        protein_goal_g: p,
+        kcal_goal: k,
       });
+      setProteinGoal(p ?? undefined);
+      setKcalGoal(k ?? undefined);
       onDataChanged();
       setMsg('Profil gespeichert.');
     });

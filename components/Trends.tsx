@@ -327,8 +327,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="g" {...axis} width={36} />
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
-            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
-            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
+            {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
+            {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line
                 key={m.key}
