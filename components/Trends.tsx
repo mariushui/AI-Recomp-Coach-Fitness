@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
-import { BASELINE_DAYS, dailyRecovery, dailyStrain, recoveryLabel, strainTarget } from '../lib/recovery';
+import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainLabel, strainTarget } from '../lib/recovery';
+import RingCalendar, { type RingDay } from './RingCalendar';
 import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
@@ -106,7 +107,7 @@ const useToggleSet = (initial: string[]) => {
   return [on, toggle] as const;
 };
 
-const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls?: React.ReactNode; children: React.ReactElement }> = ({ title, summary, hint, controls, children }) => {
+const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls?: React.ReactNode; plain?: boolean; children: React.ReactElement }> = ({ title, summary, hint, controls, plain, children }) => {
   const [open, setOpen] = useState(false);
   return (
   <Card>
@@ -129,11 +130,15 @@ const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls
     </div>
     {hint && open && <p className="text-xs text-slate-400 mt-2 rounded-lg bg-cyber-black/60 px-3 py-2">{hint}</p>}
     {controls && <div className="mt-2">{controls}</div>}
-    <div className="h-52 mt-3">
-      <ResponsiveContainer width="100%" height="100%">
-        {children}
-      </ResponsiveContainer>
-    </div>
+    {plain ? (
+      <div className="mt-3">{children}</div>
+    ) : (
+      <div className="h-52 mt-3">
+        <ResponsiveContainer width="100%" height="100%">
+          {children}
+        </ResponsiveContainer>
+      </div>
+    )}
   </Card>
   );
 };
@@ -142,6 +147,7 @@ const has = (rows: Record<string, any>[], k: string) => rows.some((r) => typeof 
 
 const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [range, setRangeState] = useState<Range>(loadRange);
+  const [ringMode, setRingMode] = useState<'recovery' | 'strain' | 'sleep'>('recovery');
   const setRange = (r: Range) => {
     setRangeState(r);
     try {
@@ -197,6 +203,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     const recovery = dailyRecovery(ext);
     const strain = dailyStrain([...pre, ...entries], ext);
     const recByDay = new Map(ext.map((d, i) => [d.day, recovery[i]]));
+    const balance = balanceSeries(ext.map((d, i) => ({ recovery: recovery[i], strain: strain.get(d.day) })));
+    const balByDay = new Map(ext.map((d, i) => [d.day, balance[i]]));
     days.forEach((d) => {
       const r = recByDay.get(d.day);
       (d as any).recovery = r;
@@ -204,10 +212,11 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       const t = strainTarget(r);
       (d as any).strainLo = t?.lo;
       (d as any).strainHi = t?.hi;
+      (d as any).balance = balByDay.get(d.day);
     });
     const bs = buckets(from, to, g, range);
     const rows = aggregate(days as any, bs, [
-      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any, 'strainLo' as any, 'strainHi' as any,
+      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any, 'strainLo' as any, 'strainHi' as any, 'balance' as any,
       'protein', 'carbs', 'fat', 'kcal',
       'steps', 'activeKcal', 'exerciseMin',
       'restingHr', 'hrv', 'hrRecovery', 'sleepH', 'vo2max', 'spo2',
@@ -223,6 +232,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     }
     rows.forEach((r) => {
       r.strainBand = r.strainLo !== undefined && r.strainHi !== undefined ? [r.strainLo, r.strainHi] : undefined;
+      r.balOver = typeof r.balance === 'number' && r.balance > BALANCE_BAND ? [BALANCE_BAND, r.balance] : undefined;
+      r.balUnder = typeof r.balance === 'number' && r.balance < -BALANCE_BAND ? [r.balance, -BALANCE_BAND] : undefined;
     });
     const states = matchPlans(entries);
     const training = trainingRows(entries, states, bs, g);
@@ -243,6 +254,22 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       })
       .filter(Boolean)
       .join(' · ');
+  const todayKey = dayKey(new Date());
+  const ringDays: RingDay[] = days.map((d: any) => {
+    if (ringMode === 'recovery') return { day: d.day, value: d.recovery, max: 100, color: recoveryLabel(d.recovery).color };
+    if (ringMode === 'strain') {
+      const l = strainLabel(d.strain);
+      const color = l === 'leicht' ? '#38BDF8' : l === 'moderat' ? '#FBBF24' : l === 'hoch' ? '#FF6B00' : l === 'sehr hoch' ? '#FF375F' : '#475569';
+      return { day: d.day, value: d.strain, max: 10, color };
+    }
+    const pct = sleepScore(d.sleepH);
+    return { day: d.day, value: pct, max: 100, color: '#8B5CF6' };
+  });
+  const lastBalance = [...days].reverse().map((d: any) => d.balance).find((b) => typeof b === 'number');
+  const strainAvg = (n: number) => {
+    const v = days.slice(-n).map((d: any) => d.strain ?? 0);
+    return v.length ? Math.round((v.reduce((a: number, b: number) => a + b, 0) / v.length) * 10) / 10 : undefined;
+  };
   const xAxis = <XAxis dataKey="label" {...axis} minTickGap={range <= 7 ? 0 : 20} interval={range <= 7 ? 0 : 'preserveStartEnd'} />;
 
   return (
@@ -265,6 +292,25 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       {g !== 'day' && <p className="text-[11px] text-slate-500 -mt-2">Ein Wert pro Woche: Mittelwert, Training als Summe.</p>}
       {error && <ErrorBox>{error}</ErrorBox>}
 
+      {show('rings') && range <= 30 && (
+        <Chart
+          plain
+          title="Ring-Kalender"
+          summary={ringMode === 'recovery' ? 'Erholung je Tag, 0 bis 100' : ringMode === 'strain' ? 'Belastung je Tag, 0 bis 10' : 'Schlaf je Nacht in Prozent von 9 h'}
+          controls={
+            <div className="flex gap-1.5">
+              {([['recovery', 'Erholung'], ['strain', 'Belastung'], ['sleep', 'Schlaf']] as const).map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setRingMode(k)} aria-pressed={ringMode === k} className={`rounded-full border px-2.5 py-1 text-xs font-bold ${ringMode === k ? 'text-slate-100 border-white/20 bg-white/5' : 'text-slate-500 border-white/5'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <RingCalendar days={ringDays} today={todayKey} />
+        </Chart>
+      )}
+
       {show('body') && has(rows, 'weight') && (
         <Chart
           title="Gewicht und Körper"
@@ -281,7 +327,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="pct" orientation="right" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={30} allowDecimals={false} hide={!bodyOn.has('bodyFat') && !bodyOn.has('bmi')} />
             <Tooltip {...tooltipStyle} />
             {dots && bodyOn.has('weight') && (
-              <Line yAxisId="weight" dataKey="weight" name="Gewicht (Tag)" stroke="none" dot={{ r: 1.5, fill: '#64748b', stroke: 'none' }} activeDot={false} isAnimationActive={false} />
+              <Line yAxisId="weight" dataKey="weight" name="Gewicht (Tag)" stroke="none" dot={{ r: range <= 7 ? 3 : 1.5, fill: range <= 7 ? '#ADFF2F' : '#64748b', stroke: 'none' }} activeDot={false} isAnimationActive={false}>
+                {range <= 7 && <LabelList dataKey="weight" position="top" offset={8} fontSize={11} fontWeight={700} fill="#e2e8f0" formatter={(v: any) => (typeof v === 'number' ? v.toFixed(1) : '')} />}
+              </Line>
             )}
             {BODY.filter((s) => bodyOn.has(s.key)).map((s) => (
               <Line
@@ -421,6 +469,26 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Area yAxisId="strain" dataKey="strainBand" name="Zielbereich Belastung" stroke="none" fill="#94a3b8" fillOpacity={0.18} connectNulls isAnimationActive={false} />
             <Line yAxisId="rec" dataKey="recovery" name="Erholung %" stroke="#94a3b8" strokeWidth={2} dot={<RecoveryDot />} connectNulls />
             <Line yAxisId="strain" dataKey="strain" name="Belastung" stroke="#38BDF8" strokeWidth={2} dot={{ r: 2.5, fill: '#38BDF8', stroke: 'none' }} connectNulls />
+          </ComposedChart>
+        </Chart>
+      )}
+
+      {show('balance') && has(rows, 'balance') && (
+        <Chart
+          title="Balance: Belastung zu Erholung"
+          summary={`${balanceLabel(lastBalance).text} · Ø Belastung 7 Tage ${strainAvg(7)?.toLocaleString('de-DE') ?? '–'}, 28 Tage ${strainAvg(28)?.toLocaleString('de-DE') ?? '–'}`}
+          hint="7-Tage-Mittel von Belastung minus Mitte deines Zielbereichs. Im grauen Band trainierst du passend zur Erholung. Rot darüber = Überlastung, blau darunter = erholsam mit Luft nach oben. Die Zahlen rechts: mittlere Belastung der letzten 7 und 28 Tage, kurzfristig deutlich über langfristig heißt steiler Anstieg."
+        >
+          <ComposedChart data={rows}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            {xAxis}
+            <YAxis {...axis} domain={[(min: number) => Math.min(-3, Math.floor(min)), (max: number) => Math.max(3, Math.ceil(max))]} width={30} tickFormatter={(v: number) => (v > 0 ? `+${v}` : String(v))} />
+            <Tooltip {...tooltipStyle} formatter={(v: any, name: string) => (Array.isArray(v) ? [`${v[0]} bis ${v[1]}`, name] : [v, name])} />
+            <ReferenceArea y1={-BALANCE_BAND} y2={BALANCE_BAND} shape={(p: any) => <rect x={p.x} y={p.y} width={p.width} height={p.height} fill="#94a3b8" fillOpacity={0.15} />} />
+            <ReferenceLine y={0} stroke="#334155" />
+            <Area dataKey="balOver" name="Überlastung" stroke="none" fill="#FF375F" fillOpacity={0.55} connectNulls={false} isAnimationActive={false} />
+            <Area dataKey="balUnder" name="Erholsam" stroke="none" fill="#38BDF8" fillOpacity={0.5} connectNulls={false} isAnimationActive={false} />
+            <Line dataKey="balance" name="Balance" stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls />
           </ComposedChart>
         </Chart>
       )}

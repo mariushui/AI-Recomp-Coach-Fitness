@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dailyRecovery, dailyStrain, recoveryAt, recoveryLabel, sleepScore, strainFromLoad, strainLabel, strainTarget, strainVsTarget } from '../lib/recovery';
+import { balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryAt, recoveryLabel, sleepScore, strainFromLoad, strainLabel, strainTarget, strainVsTarget } from '../lib/recovery';
 import type { DayStats } from '../lib/stats';
 import type { Entry } from '../supabase/functions/_shared/domain';
 
@@ -96,5 +96,31 @@ describe('Zielbereich und Schlaf', () => {
     expect(sleepScore(7.5)).toBe(83);
     expect(sleepScore(10)).toBe(100);
     expect(sleepScore(undefined)).toBeUndefined();
+  });
+});
+
+describe('Balance Belastung zu Erholung', () => {
+  it('7-Tage-Mittel von Belastung minus Zielmitte, erst ab 3 Tagen', () => {
+    // Erholung 74 → Ziel 4,6 bis 7,0, Mitte 5,8
+    const days = [
+      { recovery: 74, strain: 5.8 },
+      { recovery: 74, strain: 5.8 },
+      { recovery: 74, strain: 8.8 },
+      { recovery: 74, strain: 2.8 },
+      { recovery: undefined, strain: 5 },
+    ];
+    const b = balanceSeries(days);
+    expect(b[0]).toBeUndefined();
+    expect(b[1]).toBeUndefined();
+    expect(b[2]).toBe(1);
+    expect(b[3]).toBe(0);
+    expect(b[4]).toBe(0); // Tag ohne Erholung zählt nicht mit
+  });
+  it('Tage ohne Belastung ziehen die Balance nach unten', () => {
+    const b = balanceSeries(Array(7).fill({ recovery: 74, strain: undefined }));
+    expect(b[6]).toBe(-5.8);
+    expect(balanceLabel(b[6]).text).toContain('erholsam');
+    expect(balanceLabel(2).text).toBe('Überlastung');
+    expect(balanceLabel(0.5).text).toBe('passend trainiert');
   });
 });

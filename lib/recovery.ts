@@ -119,6 +119,34 @@ export function strainVsTarget(strain: number | undefined, target: { lo: number;
   return 'im Ziel';
 }
 
+export const BALANCE_BAND = 1.2; // halbe Breite des Zielbereichs
+export const BALANCE_WINDOW = 7;
+
+/**
+ * Balance zwischen Belastung und Erholung, wie "Recovery-Based Training" bei Athlytic:
+ * je Tag Belastung minus Mitte des Zielbereichs, davon das gleitende 7-Tage-Mittel.
+ * Über +1,2 = Überlastung, unter -1,2 = erholsam, dazwischen passend. Tage ohne Belastung zählen als 0.
+ */
+export function balanceSeries(days: { recovery?: number; strain?: number }[]): (number | undefined)[] {
+  const daily = days.map((d) => {
+    const t = strainTarget(d.recovery);
+    if (!t) return undefined;
+    return (d.strain ?? 0) - (t.lo + t.hi) / 2;
+  });
+  return daily.map((_, i) => {
+    const win = daily.slice(Math.max(0, i - BALANCE_WINDOW + 1), i + 1).filter((v): v is number => v !== undefined);
+    if (win.length < 3) return undefined;
+    return Math.round((win.reduce((a, b) => a + b, 0) / win.length) * 10) / 10;
+  });
+}
+
+export function balanceLabel(b: number | undefined): { text: string; color: string } {
+  if (b === undefined) return { text: 'noch keine Balance', color: '#64748b' };
+  if (b > BALANCE_BAND) return { text: 'Überlastung', color: '#FF375F' };
+  if (b < -BALANCE_BAND) return { text: 'erholsam, Luft nach oben', color: '#38BDF8' };
+  return { text: 'passend trainiert', color: '#ADFF2F' };
+}
+
 export const SLEEP_FULL_H = 9; // 9 h Schlaf = 100 %, 7 h 30 = 83 %
 
 /** Schlaf der Nacht in Prozent eines vollen Schlafs. */
