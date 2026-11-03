@@ -54,8 +54,7 @@ Für Gewicht sieht der Block so aus:
 2. **Details von Health-Samples abrufen** (Get Details of Health Sample): **Wert** von *Health-Samples*
 3. **Variable festlegen** (Set Variable): `GW`
 4. **Details von Health-Samples abrufen**: **Startdatum** von *Health-Samples* (die Ausgabe aus Schritt 1 antippen, nicht die aus Schritt 2)
-5. **Datum formatieren** (Format Date): Datumsformat **ISO 8601**, **Uhrzeit einschließen** an
-6. **Variable festlegen**: `GD`
+5. **Variable festlegen**: `GD`. Kein „Datum formatieren“ dazwischen: Die Aktion liefert bei einer Liste von Daten nichts. Der Server liest das Datumsformat von Kurzbefehle („03.11.2026, 07:12“) in Berliner Zeit.
 
 Mit Duplizieren (lange auf eine Aktion drücken) geht das schneller. Danach nur Typ und Variablen-Namen ändern.
 
@@ -65,7 +64,7 @@ iPhone und Watch zählen Schritte parallel. Damit nichts doppelt zählt, schickt
 
 1. **Health-Samples suchen**: Typ **Schritte** (Steps), Startdatum in den letzten **3 Tagen**, sortiert nach Startdatum, älteste zuerst
 2. **Details von Health-Samples abrufen**: **Wert** → **Variable festlegen** `TW`
-3. **Details von Health-Samples abrufen**: **Startdatum** → **Datum formatieren** ISO 8601 mit Uhrzeit → **Variable festlegen** `TD`
+3. **Details von Health-Samples abrufen**: **Startdatum** → **Variable festlegen** `TD`
 4. **Details von Health-Samples abrufen**: **Quelle** (Source) → **Variable festlegen** `TQ`
 
 ### Bausteine Aktivitätsringe
@@ -81,10 +80,10 @@ Den Ring „Stehen“ lassen wir weg.
 
 ### Baustein Schlaf
 
-1. **Health-Samples suchen**: Typ **Schlafanalyse** (Sleep Analysis), Startdatum in den letzten **3 Tagen**, sortiert nach Startdatum, älteste zuerst
+1. **Health-Samples suchen**: Typ **Schlaf** (Sleep), Startdatum in den letzten **3 Tagen**, sortiert nach Startdatum, älteste zuerst
 2. **Details von Health-Samples abrufen**: **Wert** → **Variable festlegen** `SW`
-3. **Details von Health-Samples abrufen**: **Startdatum** → **Datum formatieren** ISO 8601 mit Uhrzeit → **Variable festlegen** `SS`
-4. **Details von Health-Samples abrufen**: **Enddatum** → **Datum formatieren** ISO 8601 mit Uhrzeit → **Variable festlegen** `SE`
+3. **Details von Health-Samples abrufen**: **Startdatum** → **Variable festlegen** `SS`
+4. **Details von Health-Samples abrufen**: **Enddatum** → **Variable festlegen** `SE`
 
 ### Senden
 
