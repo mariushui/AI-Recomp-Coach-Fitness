@@ -113,7 +113,7 @@ actions.append(action("is.workflow.actions.downloadurl", {
 }, dl))
 gv = str(uuid.uuid4()).upper()
 actions.append(action("is.workflow.actions.getvalueforkey", {
-    "WFGetDictionaryKey": plain("summary"),
+    "WFDictionaryKey": "summary",
     "WFGetDictionaryValueType": "Value",
     "WFInput": ref(dl, "Contents of URL"),
 }, gv))
