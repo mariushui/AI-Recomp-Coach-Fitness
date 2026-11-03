@@ -1,0 +1,8 @@
+{
+  "name": "AI Recomp Coach",
+  "description": "An intelligent fitness coach that analyzes your daily health data from Apple Health (manually entered) and provides personalized advice using the Gemini API. The app supports both German and English.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": []
+}

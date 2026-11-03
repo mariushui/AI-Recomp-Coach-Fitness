@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build & Cache
+dist/
+dist-ssr/
+.cache/
+*.local
+.env
+.env.*
+
+# Gemini/Internal logs
+migrated_prompt_history/
+logs
+*.log
+npm-debug.log*
+
+# System/IDEs
+.vscode/
+.idea/
+.DS_Store
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
