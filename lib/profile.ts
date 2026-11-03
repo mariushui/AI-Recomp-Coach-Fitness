@@ -6,9 +6,11 @@ export interface Profile {
   protein_goal_g?: number | null; // Tagesziel Protein in g
   kcal_goal?: number | null; // Tagesziel Kalorien
   birth_date?: string | null; // YYYY-MM-DD
+  carbs_goal_g?: number | null;
+  fat_goal_g?: number | null;
 }
 
-const COLUMNS = 'display_name, height_cm, protein_goal_g, kcal_goal, birth_date';
+const COLUMNS = 'display_name, height_cm, protein_goal_g, kcal_goal, birth_date, carbs_goal_g, fat_goal_g';
 
 export async function loadProfile(userId?: string): Promise<Profile> {
   const uid = userId ?? (await supabase.auth.getSession()).data.session?.user.id;
@@ -53,6 +55,17 @@ export function suggestedKcalGoal(leanMassKg: number | undefined, avgActiveKcal:
   if (!leanMassKg || leanMassKg < 20) return undefined;
   const bmr = 370 + 21.6 * leanMassKg;
   return Math.round((bmr * 1.1 + (avgActiveKcal ?? 0)) / 50) * 50;
+}
+
+/**
+ * Vorschlag für Fett und Kohlenhydrate aus Kalorien- und Protein-Ziel:
+ * Fett 30 % der Kalorien (9 kcal je g), der Rest Kohlenhydrate (4 kcal je g). Auf 5 g gerundet.
+ */
+export function suggestedMacroGoals(kcalGoal: number | undefined, proteinGoal: number | undefined): { carbs: number; fat: number } | undefined {
+  if (!kcalGoal || !proteinGoal) return undefined;
+  const fat = Math.round((kcalGoal * 0.3) / 9 / 5) * 5;
+  const carbs = Math.max(20, Math.round((kcalGoal - proteinGoal * 4 - fat * 9) / 4 / 5) * 5);
+  return { carbs, fat };
 }
 
 /** Alter in Jahren aus dem Geburtsdatum */

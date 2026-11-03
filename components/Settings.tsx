@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
-import { ageFrom, loadProfile, proteinBasis, saveProfile, suggestedKcalGoal, suggestedProteinGoal } from '../lib/profile';
+import { ageFrom, loadProfile, proteinBasis, saveProfile, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal } from '../lib/profile';
 import { listEntries } from '../lib/entries';
 import { average, dailyStats } from '../lib/stats';
 import { addDays } from '../lib/time';
@@ -24,6 +24,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [height, setHeight] = useState<number | undefined>();
   const [proteinGoal, setProteinGoal] = useState<number | undefined>();
   const [kcalGoal, setKcalGoal] = useState<number | undefined>();
+  const [carbsGoal, setCarbsGoal] = useState<number | undefined>();
+  const [fatGoal, setFatGoal] = useState<number | undefined>();
   const [leanMass, setLeanMass] = useState<number | undefined>();
   const [muscle, setMuscle] = useState<number | undefined>(); // Muskelmasse laut Waage
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
@@ -42,6 +44,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         setHeight(p.height_cm ?? undefined);
         setProteinGoal(p.protein_goal_g ?? undefined);
         setKcalGoal(p.kcal_goal ?? undefined);
+        setCarbsGoal(p.carbs_goal_g ?? undefined);
+        setFatGoal(p.fat_goal_g ?? undefined);
         setBirthDate(p.birth_date ?? undefined);
       })
       .catch(() => undefined);
@@ -96,6 +100,10 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       const k = kcalGoal === undefined ? null : Math.round(kcalGoal);
       if (p !== null && (p < 30 || p > 400)) throw new Error('Protein-Ziel bitte zwischen 30 und 400 g.');
       if (k !== null && (k < 800 || k > 6000)) throw new Error('Kalorien-Ziel bitte zwischen 800 und 6.000 kcal.');
+      const c = carbsGoal === undefined ? null : Math.round(carbsGoal);
+      const f = fatGoal === undefined ? null : Math.round(fatGoal);
+      if (c !== null && (c < 20 || c > 800)) throw new Error('Kohlenhydrat-Ziel bitte zwischen 20 und 800 g.');
+      if (f !== null && (f < 20 || f > 300)) throw new Error('Fett-Ziel bitte zwischen 20 und 300 g.');
       if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
       if (birthDate && (birthDate < '1900-01-01' || ageFrom(birthDate) === undefined || ageFrom(birthDate)! > 120)) throw new Error('Geburtsdatum bitte prüfen.');
       await saveProfile(session.user.id, {
@@ -104,7 +112,11 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         protein_goal_g: p,
         kcal_goal: k,
         birth_date: birthDate ?? null,
+        carbs_goal_g: c,
+        fat_goal_g: f,
       });
+      setCarbsGoal(c ?? undefined);
+      setFatGoal(f ?? undefined);
       setProteinGoal(p ?? undefined);
       setKcalGoal(k ?? undefined);
       onDataChanged();
@@ -196,7 +208,18 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
           <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />
+          <NumberField label="Kohlenhydrate" unit="g" value={carbsGoal} onChange={setCarbsGoal} />
+          <NumberField label="Fett" unit="g" value={fatGoal} onChange={setFatGoal} />
         </div>
+        {(() => {
+          const m = suggestedMacroGoals(kcalGoal, proteinGoal);
+          if (!m || (carbsGoal === m.carbs && fatGoal === m.fat)) return null;
+          return (
+            <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => { setCarbsGoal(m.carbs); setFatGoal(m.fat); }}>
+              Vorschlag aus Kalorien und Protein: {m.carbs} g Kohlenhydrate, {m.fat} g Fett (Fett 30 % der Kalorien, Rest Kohlenhydrate)
+            </button>
+          );
+        })()}
         {leanMass === undefined && muscle === undefined ? (
           <p className="text-xs text-slate-500">Vorschläge gibt es, sobald Gewicht und Körperfett erfasst sind (Waage oder Apple Health).</p>
         ) : (

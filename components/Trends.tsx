@@ -170,7 +170,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heightCm, setHeightCm] = useState<number | null>(null);
-  const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null }>({});
+  const [goals, setGoals] = useState<{ protein?: number | null; kcal?: number | null; carbs?: number | null; fat?: number | null }>({});
   const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'muscle', 'bmi']);
   const [macroOn, toggleMacro] = useToggleSet(['protein', 'carbs', 'fat']);
   const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
@@ -188,7 +188,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     loadProfile()
       .then((p) => {
         setHeightCm(p.height_cm ?? null);
-        setGoals({ protein: p.protein_goal_g, kcal: p.kcal_goal });
+        setGoals({ protein: p.protein_goal_g, kcal: p.kcal_goal, carbs: p.carbs_goal_g, fat: p.fat_goal_g });
       })
       .catch(() => undefined);
   }, []);
@@ -346,6 +346,8 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
             {goals.protein && macroOn.has('protein') && <ReferenceLine yAxisId="g" y={goals.protein} ifOverflow="extendDomain" stroke="#8B5CF6" strokeDasharray="4 4" label={{ value: `Ziel ${goals.protein} g`, fill: '#8B5CF6', fontSize: 10, position: 'insideTopLeft' }} />}
+            {goals.carbs && macroOn.has('carbs') && <ReferenceLine yAxisId="g" y={goals.carbs} ifOverflow="extendDomain" stroke="#38BDF8" strokeDasharray="4 4" />}
+            {goals.fat && macroOn.has('fat') && <ReferenceLine yAxisId="g" y={goals.fat} ifOverflow="extendDomain" stroke="#FBBF24" strokeDasharray="4 4" />}
             {goals.kcal && macroOn.has('kcal') && <ReferenceLine yAxisId="kcal" y={goals.kcal} ifOverflow="extendDomain" stroke="#F59E0B" strokeDasharray="4 4" label={{ value: `Ziel ${goals.kcal} kcal`, fill: '#F59E0B', fontSize: 10, position: 'insideTopRight' }} />}
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line

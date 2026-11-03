@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ageFrom, proteinBasis, suggestedKcalGoal, suggestedProteinGoal } from '../lib/profile';
+import { ageFrom, proteinBasis, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal } from '../lib/profile';
 
 describe('Ziel-Vorschläge', () => {
   it('nimmt die Waagen-Muskelmasse, wenn sie zur fettfreien Masse passt, sonst die fettfreie Masse', () => {
@@ -19,5 +19,10 @@ describe('Ziel-Vorschläge', () => {
     expect(ageFrom('1989-11-04', new Date('2026-11-03T12:00:00'))).toBe(36);
     expect(ageFrom('1989-11-03', new Date('2026-11-03T12:00:00'))).toBe(37);
     expect(ageFrom('quatsch')).toBeUndefined();
+  });
+
+  it('leitet Fett und Kohlenhydrate aus Kalorien und Protein ab', () => {
+    expect(suggestedMacroGoals(2500, 135)).toEqual({ carbs: 300, fat: 85 }); // 85 x 9 + 135 x 4 + 300 x 4 = 2505
+    expect(suggestedMacroGoals(undefined, 135)).toBeUndefined();
   });
 });
