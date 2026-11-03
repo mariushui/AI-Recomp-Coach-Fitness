@@ -1,41 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { SPORTS, SPORT_LABEL, type Entry } from '../supabase/functions/_shared/domain';
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
-import { average, bmi, dailyStats, movingAverage, weeklyAverages, weeklySportMinutes } from '../lib/stats';
-import { loadProfile } from '../lib/profile';
-import { Icons } from './icons';
-import { matchPlans, weeklyPlanStats } from '../lib/plans';
+import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
+import { matchPlans } from '../lib/plans';
 import { listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
-import { addDays, startOfDay } from '../lib/time';
+import { loadProfile } from '../lib/profile';
+import { addDays, dayKey, startOfDay } from '../lib/time';
+import { aggregate, buckets, granularityFor, trainingRows } from './trendData';
+import { Icons } from './icons';
 import { Card, ErrorBox } from './ui';
 
 const RANGES = [7, 30, 90, 365] as const;
-const RANGE_LABEL: Record<(typeof RANGES)[number], string> = { 7: 'Woche', 30: '30 Tage', 90: '90 Tage', 365: 'Jahr' };
+type Range = (typeof RANGES)[number];
+const RANGE_LABEL: Record<Range, string> = { 7: 'Woche', 30: '30 Tage', 90: '90 Tage', 365: 'Jahr' };
 
 const CHARTS = [
   { key: 'body', label: 'Gewicht und Körper' },
   { key: 'nutrition', label: 'Ernährung' },
-  { key: 'training', label: 'Training pro Woche' },
-  { key: 'plan', label: 'Plan erfüllt' },
-  { key: 'sleep', label: 'Schlaf und HRV' },
-  { key: 'steps', label: 'Aktivität (Schritte, Ringe)' },
+  { key: 'training', label: 'Training und Plan' },
+  { key: 'activity', label: 'Aktivität (Schritte, Ringe)' },
+  { key: 'heart', label: 'Herz: Ruhepuls, HRV, Cardio-Erholung' },
+  { key: 'sleep', label: 'Schlaf' },
   { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
-  { key: 'rhr', label: 'Ruhepuls' },
 ] as const;
-const CHART_KEY = 'recomp_trend_charts_v1';
+const CHART_KEY = 'recomp_trend_charts_v2';
 const loadCharts = (): Set<string> => {
   try {
     const raw = localStorage.getItem(CHART_KEY);
@@ -46,29 +36,47 @@ const loadCharts = (): Set<string> => {
   return new Set(CHARTS.map((c) => c.key));
 };
 
-const BODY_SERIES = [
+const SPORT_COLORS: Record<string, string> = {
+  tennis: '#ADFF2F',
+  laufen: '#00F0FF',
+  capoeira: '#FF6B00',
+  kraft: '#8B5CF6',
+  rad: '#38BDF8',
+  schwimmen: '#22D3EE',
+  mobility: '#F472B6',
+  sonstiges: '#94A3B8',
+};
+
+type Series = { key: string; label: string; color: string };
+const BODY: Series[] = [
   { key: 'weight', label: 'Gewicht', color: '#ADFF2F' },
   { key: 'fatMass', label: 'Fett kg', color: '#FF6B00' },
-  { key: 'lean', label: 'Magermasse kg', color: '#00F0FF' },
-  { key: 'fat', label: 'Körperfett %', color: '#FBBF24' },
+  { key: 'leanMass', label: 'Magermasse kg', color: '#00F0FF' },
+  { key: 'bodyFat', label: 'Körperfett %', color: '#FBBF24' },
   { key: 'bmi', label: 'BMI', color: '#F472B6' },
-] as const;
-const ACTIVITY_SERIES = [
-  { key: 'steps', label: 'Schritte', color: '#64748b' },
-  { key: 'activeKcal', label: 'Bewegen kcal', color: '#FF375F' },
-  { key: 'exerciseMin', label: 'Trainieren min', color: '#ADFF2F' },
-] as const;
-
-const MACROS = [
+];
+const MACROS: (Series & { unit: string })[] = [
   { key: 'protein', label: 'Protein', color: '#8B5CF6', unit: 'g' },
   { key: 'carbs', label: 'Kohlenhydrate', color: '#38BDF8', unit: 'g' },
   { key: 'fat', label: 'Fett', color: '#FBBF24', unit: 'g' },
   { key: 'kcal', label: 'Kalorien', color: '#94A3B8', unit: 'kcal' },
-] as const;
-type MacroKey = (typeof MACROS)[number]['key'];
+];
+const ACTIVITY: Series[] = [
+  { key: 'steps', label: 'Schritte', color: '#64748b' },
+  { key: 'activeKcal', label: 'Bewegen kcal', color: '#FF375F' },
+  { key: 'exerciseMin', label: 'Trainieren min', color: '#ADFF2F' },
+];
+const HEART: Series[] = [
+  { key: 'restingHr', label: 'Ruhepuls bpm', color: '#F472B6' },
+  { key: 'hrv', label: 'HRV ms', color: '#00F0FF' },
+  { key: 'hrRecovery', label: 'Cardio-Erholung bpm', color: '#ADFF2F' },
+];
+
+const axis = { stroke: '#475569', fontSize: 11 };
+const tooltipStyle = { contentStyle: { background: '#121214', border: '1px solid #333', borderRadius: 12, fontSize: 12 } };
 
 /** An- und abklickbare Auswahl */
-const Chips: React.FC<{ items: readonly { key: string; label: string; color: string }[]; on: Set<string>; toggle: (k: string) => void }> = ({ items, on, toggle }) => (
+const Chips: React.FC<{ items: Series[]; on: Set<string>; toggle: (k: string) => void }> = ({ items, on, toggle }) => (
   <div className="flex flex-wrap gap-1.5">
     {items.map((i) => {
       const active = on.has(i.key);
@@ -98,27 +106,13 @@ const useToggleSet = (initial: string[]) => {
     });
   return [on, toggle] as const;
 };
-const SPORT_COLORS: Record<string, string> = {
-  tennis: '#ADFF2F',
-  laufen: '#00F0FF',
-  capoeira: '#FF6B00',
-  kraft: '#8B5CF6',
-  rad: '#38BDF8',
-  schwimmen: '#22D3EE',
-  mobility: '#F472B6',
-  sonstiges: '#94A3B8',
-};
-
-const axis = { stroke: '#475569', fontSize: 11 };
-const tooltipStyle = { contentStyle: { background: '#121214', border: '1px solid #333', borderRadius: 12, fontSize: 12 } };
-const shortDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.`;
 
 const Chart: React.FC<{ title: string; hint?: string; controls?: React.ReactNode; children: React.ReactElement }> = ({ title, hint, controls, children }) => (
   <Card>
     <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{title}</p>
-    {hint && <p className="text-xs text-slate-500 mb-2">{hint}</p>}
-    {controls && <div className="mt-2 space-y-2">{controls}</div>}
-    <div className="h-52 mt-2">
+    {hint && <p className="text-xs text-slate-500 mt-0.5">{hint}</p>}
+    {controls && <div className="mt-2">{controls}</div>}
+    <div className="h-52 mt-3">
       <ResponsiveContainer width="100%" height="100%">
         {children}
       </ResponsiveContainer>
@@ -126,13 +120,31 @@ const Chart: React.FC<{ title: string; hint?: string; controls?: React.ReactNode
   </Card>
 );
 
+const has = (rows: Record<string, any>[], k: string) => rows.some((r) => typeof r[k] === 'number' && r[k] !== 0);
+
 const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
-  const [range, setRange] = useState<(typeof RANGES)[number]>(90);
+  const [range, setRange] = useState<Range>(30);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const to = addDays(startOfDay(new Date()), 1);
-  const from = addDays(to, -range);
+  const [charts, setCharts] = useState<Set<string>>(loadCharts);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [heightCm, setHeightCm] = useState<number | null>(null);
+  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'leanMass', 'bmi']);
+  const [macroOn, toggleMacro] = useToggleSet(['protein', 'carbs', 'fat']);
+  const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
+  const [activityOn, toggleActivity] = useToggleSet(['steps', 'activeKcal', 'exerciseMin']);
+  const [heartOn, toggleHeart] = useToggleSet(['restingHr', 'hrv', 'hrRecovery']);
 
+  // Woche = Kalenderwoche Montag bis Sonntag, inklusive kommender Tage (für den Plan-Schatten)
+  const today0 = startOfDay(new Date());
+  const monday = addDays(today0, -((today0.getDay() + 6) % 7));
+  const to = range === 7 ? addDays(monday, 7) : addDays(today0, 1);
+  const from = range === 7 ? monday : addDays(to, -range);
+  const g = granularityFor(range);
+
+  useEffect(() => {
+    loadProfile().then((p) => setHeightCm(p.height_cm ?? null)).catch(() => undefined);
+  }, []);
   useEffect(() => {
     Promise.all([listEntries(from, to), listSlots()])
       .then(([list, slots]) => setEntries(visiblePlans([...list, ...expandSlots(slots, list, from, to)])))
@@ -140,15 +152,6 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, refreshKey]);
 
-  const [bodyOn, toggleBody] = useToggleSet(['weight', 'fatMass', 'lean', 'bmi']);
-  const [sportOn, toggleSport] = useToggleSet([...SPORTS]);
-  const [activityOn, toggleActivity] = useToggleSet(['steps', 'activeKcal', 'exerciseMin']);
-  const [charts, setCharts] = useState<Set<string>>(loadCharts);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [heightCm, setHeightCm] = useState<number | null>(null);
-  useEffect(() => {
-    loadProfile().then((p) => setHeightCm(p.height_cm ?? null)).catch(() => undefined);
-  }, []);
   const show = (k: string) => charts.has(k);
   const toggleChart = (k: string) =>
     setCharts((prev) => {
@@ -162,38 +165,45 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       }
       return n;
     });
-  const [macroOn, toggleMacro] = useToggleSet(['protein', 'carbs', 'fat']);
-  const [weekly, setWeekly] = useState(false);
 
-  const days = useMemo(() => {
-    const s = dailyStats(entries, from, to);
-    const avg = movingAverage(s.map((d) => d.weight));
-    const leanAvg = movingAverage(s.map((d) => d.leanMass));
-    const fatAvg = movingAverage(s.map((d) => d.bodyFat));
-    const fatMassAvg = movingAverage(s.map((d) => d.fatMass));
-    return s.map((d, i) => ({
-      ...d,
-      weightAvg: avg[i],
-      leanAvg: leanAvg[i],
-      bodyFatAvg: fatAvg[i],
-      fatMassAvg: fatMassAvg[i],
-      bmi: bmi(avg[i], heightCm),
-      label: shortDay(d.day),
-    }));
+  const data = useMemo(() => {
+    const days = dailyStats(entries, from, to).map((d) => ({ ...d, bmi: bmi(d.weight, heightCm) }));
+    const bs = buckets(from, to, g, range);
+    const rows = aggregate(days as any, bs, [
+      'weight', 'fatMass', 'leanMass', 'bodyFat', 'bmi' as any,
+      'protein', 'carbs', 'fat', 'kcal',
+      'steps', 'activeKcal', 'exerciseMin',
+      'restingHr', 'hrv', 'hrRecovery', 'sleepH', 'vo2max', 'spo2',
+    ]);
+    // Körperlinien: bei Tagen 7-Tage-Schnitt, bei Wochen der Wochenmittelwert
+    if (g === 'day') {
+      for (const s of BODY) {
+        const avg = movingAverage(days.map((d) => (d as any)[s.key]));
+        rows.forEach((r, i) => (r[`${s.key}Line`] = avg[i]));
+      }
+    } else {
+      rows.forEach((r) => BODY.forEach((s) => (r[`${s.key}Line`] = r[s.key])));
+    }
+    const states = matchPlans(entries);
+    const training = trainingRows(entries, states, bs, g);
+    const today = dayKey(new Date());
+    const pastPlans = states.filter((s) => dayKey(s.plan.occurred_at) <= today);
+    return { days, rows, training, planDone: pastPlans.filter((s) => s.status === 'erledigt').length, planTotal: pastPlans.length };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, heightCm]);
-  const weeks = useMemo(() => weeklySportMinutes(entries).map((w) => ({ ...w, label: shortDay(w.week) })), [entries]);
-  const planWeeks = useMemo(
-    () => weeklyPlanStats(matchPlans(entries)).map((w) => ({ ...w, label: shortDay(w.week), open: w.planned - w.done })),
-    [entries],
-  );
-  const nutritionDays = useMemo(
-    () => (weekly ? weeklyAverages(days, ['protein', 'carbs', 'fat', 'kcal']).map((w) => ({ ...w, label: shortDay(w.week) })) : days),
-    [days, weekly],
-  );
-  const macroAvg = Object.fromEntries(MACROS.map((m) => [m.key, average(days, m.key)])) as Record<MacroKey, number | undefined>;
-  const sportsUsed = SPORTS.filter((s) => weeks.some((w) => w[s]));
-  const has = (k: keyof (typeof days)[number]) => days.some((d) => d[k] !== undefined);
+  }, [entries, heightCm, range]);
+
+  const { days, rows, training } = data;
+  const sportsUsed = SPORTS.filter((s) => training.some((r) => r[s] || r[`${s}_plan`]));
+  const dots = g === 'day' && range <= 30;
+  const avgText = (items: { key: string; label: string; unit?: string }[]) =>
+    items
+      .map((m) => {
+        const v = average(days, m.key as any);
+        return v !== undefined ? `${m.label} ${v.toLocaleString('de-DE')}${m.unit ? ' ' + m.unit : ''}` : null;
+      })
+      .filter(Boolean)
+      .join(' · ');
+  const xAxis = <XAxis dataKey="label" {...axis} minTickGap={range <= 7 ? 0 : 20} interval={range <= 7 ? 0 : 'preserveStartEnd'} />;
 
   return (
     <div className="space-y-4">
@@ -229,63 +239,50 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
           </button>
         ))}
       </div>
+      <p className="text-[11px] text-slate-500 -mt-2">{g === 'day' ? 'Ein Wert pro Tag.' : 'Ein Wert pro Woche (Mittelwert, Training als Summe).'}</p>
       {error && <ErrorBox>{error}</ErrorBox>}
-      {entries.length === 0 && !error && (
-        <Card>
-          <p className="text-sm text-slate-400">Noch keine Daten im Zeitraum.</p>
-        </Card>
-      )}
 
-      {show('body') && has('weight') && (
+      {show('body') && has(rows, 'weight') && (
         <Chart
-          title="Gewicht und Körperzusammensetzung"
-          hint={`Linien = 7-Tage-Schnitt. Fett + Magermasse = Gewicht. Steigt die Magermasse bei sinkendem Fett, klappt die Recomposition. Rechte Achse: % und BMI.${heightCm ? '' : ' Für den BMI unter Mehr die Körpergröße eintragen.'}`}
-          controls={<Chips items={BODY_SERIES} on={bodyOn} toggle={toggleBody} />}
+          title="Gewicht und Körper"
+          hint={`${g === 'day' ? 'Linien = 7-Tage-Schnitt, Punkte = Tageswert. ' : ''}Jede kg-Linie ist für sich skaliert, damit Trends sichtbar werden. Genaue Werte beim Antippen. Linke Achse: Gewicht, rechte Achse: % und BMI.${heightCm ? '' : ' Für den BMI unter Einstellungen die Körpergröße eintragen.'}`}
+          controls={<Chips items={BODY} on={bodyOn} toggle={toggleBody} />}
         >
-          <ComposedChart data={days}>
+          <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} minTickGap={24} />
-            <YAxis yAxisId="kg" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={36} allowDecimals={false} />
-            {(bodyOn.has('fat') || bodyOn.has('bmi')) && <YAxis yAxisId="pct" orientation="right" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={32} allowDecimals={false} />}
+            {xAxis}
+            <YAxis yAxisId="weight" {...axis} domain={['dataMin - 1', 'dataMax + 1']} width={36} allowDecimals={false} hide={!bodyOn.has('weight')} />
+            <YAxis yAxisId="fatMass" domain={['dataMin - 1', 'dataMax + 1']} hide />
+            <YAxis yAxisId="leanMass" domain={['dataMin - 1', 'dataMax + 1']} hide />
+            <YAxis yAxisId="pct" orientation="right" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={30} allowDecimals={false} hide={!bodyOn.has('bodyFat') && !bodyOn.has('bmi')} />
             <Tooltip {...tooltipStyle} />
-            {bodyOn.has('weight') && (
-              <Line yAxisId="kg" dataKey="weight" name="Gewicht (Tag)" stroke="none" dot={{ r: 1.5, fill: '#64748b', stroke: 'none' }} activeDot={false} isAnimationActive={false} />
+            {dots && bodyOn.has('weight') && (
+              <Line yAxisId="weight" dataKey="weight" name="Gewicht (Tag)" stroke="none" dot={{ r: 1.5, fill: '#64748b', stroke: 'none' }} activeDot={false} isAnimationActive={false} />
             )}
-            {bodyOn.has('weight') && <Line yAxisId="kg" dataKey="weightAvg" name="Gewicht kg" stroke="#ADFF2F" dot={false} strokeWidth={2} connectNulls />}
-            {bodyOn.has('fatMass') && <Line yAxisId="kg" dataKey="fatMassAvg" name="Fett kg" stroke="#FF6B00" dot={false} strokeWidth={2} connectNulls />}
-            {bodyOn.has('lean') && <Line yAxisId="kg" dataKey="leanAvg" name="Magermasse kg" stroke="#00F0FF" dot={false} strokeWidth={2} connectNulls />}
-            {bodyOn.has('bmi') && <Line yAxisId="pct" dataKey="bmi" name="BMI" stroke="#F472B6" dot={false} strokeWidth={2} strokeDasharray="2 3" connectNulls />}
-            {bodyOn.has('fat') && <Line yAxisId="pct" dataKey="bodyFatAvg" name="Körperfett %" stroke="#FBBF24" dot={false} strokeWidth={2} strokeDasharray="5 3" connectNulls />}
+            {BODY.filter((s) => bodyOn.has(s.key)).map((s) => (
+              <Line
+                key={s.key}
+                yAxisId={s.key === 'bodyFat' || s.key === 'bmi' ? 'pct' : s.key}
+                dataKey={`${s.key}Line`}
+                name={s.label}
+                stroke={s.color}
+                strokeWidth={2}
+                strokeDasharray={s.key === 'bodyFat' ? '5 3' : s.key === 'bmi' ? '2 3' : undefined}
+                dot={false}
+                connectNulls
+              />
+            ))}
           </ComposedChart>
         </Chart>
       )}
 
-      {show('nutrition') && (has('protein') || has('carbs') || has('fat') || has('kcal')) && (
-        <Chart
-          title="Ernährung"
-          hint={`Ø pro Tag im Zeitraum: ${MACROS.map((m) => (macroAvg[m.key] !== undefined ? `${m.label} ${macroAvg[m.key]} ${m.unit}` : null)).filter(Boolean).join(' · ')}`}
-          controls={
-            <>
-              <Chips items={MACROS} on={macroOn} toggle={toggleMacro} />
-              <div className="flex gap-1.5">
-                {[false, true].map((w) => (
-                  <button
-                    key={String(w)}
-                    onClick={() => setWeekly(w)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-bold ${weekly === w ? 'bg-cyber-purple text-white' : 'bg-white/5 text-slate-400'}`}
-                  >
-                    {w ? 'Ø pro Woche' : 'pro Tag'}
-                  </button>
-                ))}
-              </div>
-            </>
-          }
-        >
-          <ComposedChart data={nutritionDays}>
+      {show('nutrition') && MACROS.some((m) => has(rows, m.key)) && (
+        <Chart title="Ernährung" hint={`Ø pro Tag: ${avgText(MACROS)}`} controls={<Chips items={MACROS} on={macroOn} toggle={toggleMacro} />}>
+          <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} minTickGap={24} />
+            {xAxis}
             <YAxis yAxisId="g" {...axis} width={36} />
-            {macroOn.has('kcal') && <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} />}
+            <YAxis yAxisId="kcal" orientation="right" {...axis} width={40} hide={!macroOn.has('kcal')} />
             <Tooltip {...tooltipStyle} />
             {MACROS.filter((m) => macroOn.has(m.key)).map((m) => (
               <Line
@@ -296,7 +293,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
                 stroke={m.color}
                 strokeWidth={2}
                 strokeDasharray={m.key === 'kcal' ? '5 3' : undefined}
-                dot={nutritionDays.length <= 31 ? { r: 2 } : false}
+                dot={dots ? { r: 2 } : false}
                 connectNulls
               />
             ))}
@@ -304,66 +301,32 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         </Chart>
       )}
 
-      {show('training') && weeks.length > 0 && (
+      {show('training') && sportsUsed.length > 0 && (
         <Chart
-          title="Training pro Woche (min)"
-          controls={<Chips items={sportsUsed.map((x) => ({ key: x, label: SPORT_LABEL[x], color: SPORT_COLORS[x] }))} on={sportOn} toggle={toggleSport} />}
+          title={g === 'day' ? 'Training pro Tag (min)' : 'Training pro Woche (min)'}
+          hint={`Volle Farbe = trainiert, Schatten = geplant, aber nicht trainiert.${data.planTotal ? ` Plan bis heute: ${data.planDone} von ${data.planTotal} Einheiten erledigt.` : ''}`}
+          controls={<Chips items={sportsUsed.map((s) => ({ key: s, label: SPORT_LABEL[s], color: SPORT_COLORS[s] }))} on={sportOn} toggle={toggleSport} />}
         >
-          <BarChart data={weeks}>
+          <BarChart data={training}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} />
+            {xAxis}
             <YAxis {...axis} width={36} />
-            <Tooltip {...tooltipStyle} />
-            {sportsUsed.filter((x) => sportOn.has(x)).map((s) => (
-              <Bar key={s} dataKey={s} name={SPORT_LABEL[s]} stackId="a" fill={SPORT_COLORS[s]} />
-            ))}
+            <Tooltip {...tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+            {sportsUsed
+              .filter((s) => sportOn.has(s))
+              .flatMap((s: Sport) => [
+                <Bar key={s} dataKey={s} name={SPORT_LABEL[s]} stackId="t" fill={SPORT_COLORS[s]} />,
+                <Bar key={`${s}_plan`} dataKey={`${s}_plan`} name={`${SPORT_LABEL[s]} geplant, offen`} stackId="t" fill={SPORT_COLORS[s]} fillOpacity={0.18} stroke={SPORT_COLORS[s]} strokeOpacity={0.45} strokeDasharray="3 2" />,
+              ])}
           </BarChart>
         </Chart>
       )}
 
-      {show('plan') && planWeeks.length > 0 && (
-        <Chart title="Plan erfüllt pro Woche" hint="Geplante Einheiten bis heute. Grün = erledigt, grau = nicht erledigt.">
-          <BarChart data={planWeeks}>
+      {show('activity') && ACTIVITY.some((a) => has(rows, a.key)) && (
+        <Chart title="Aktivität" hint={`Ø pro Tag: ${avgText([{ key: 'steps', label: 'Schritte' }, { key: 'activeKcal', label: 'Bewegen', unit: 'kcal' }, { key: 'exerciseMin', label: 'Trainieren', unit: 'min' }])}`} controls={<Chips items={ACTIVITY} on={activityOn} toggle={toggleActivity} />}>
+          <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} />
-            <YAxis {...axis} width={28} allowDecimals={false} />
-            <Tooltip {...tooltipStyle} />
-            <Bar dataKey="done" name="erledigt" stackId="p" fill="#ADFF2F" />
-            <Bar dataKey="open" name="nicht erledigt" stackId="p" fill="#334155" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </Chart>
-      )}
-
-      {show('sleep') && (has('sleepH') || has('hrv')) && (
-        <Chart title="Schlaf und HRV" hint="Daten aus Apple Health">
-          <ComposedChart data={days}>
-            <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} minTickGap={24} />
-            <YAxis yAxisId="h" {...axis} width={28} />
-            <YAxis yAxisId="ms" orientation="right" {...axis} width={32} />
-            <Tooltip {...tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar yAxisId="h" dataKey="sleepH" name="Schlaf (h)" fill="#4C1D95" />
-            <Line yAxisId="ms" dataKey="hrv" name="HRV (ms)" stroke="#00F0FF" dot={false} connectNulls />
-          </ComposedChart>
-        </Chart>
-      )}
-
-      {show('steps') && (has('steps') || has('activeKcal') || has('exerciseMin')) && (
-        <Chart
-          title="Aktivität"
-          hint={[
-            average(days, 'steps') !== undefined && `Ø ${average(days, 'steps')!.toLocaleString('de-DE')} Schritte`,
-            average(days, 'activeKcal') !== undefined && `Ø ${average(days, 'activeKcal')} aktive kcal`,
-            average(days, 'exerciseMin') !== undefined && `Ø ${average(days, 'exerciseMin')} Trainingsminuten pro Tag`,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-          controls={<Chips items={ACTIVITY_SERIES} on={activityOn} toggle={toggleActivity} />}
-        >
-          <ComposedChart data={days}>
-            <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} minTickGap={24} />
+            {xAxis}
             <YAxis yAxisId="steps" {...axis} width={40} hide={!activityOn.has('steps')} />
             <YAxis yAxisId="kcal" orientation="right" {...axis} width={36} hide={!activityOn.has('activeKcal')} />
             <YAxis yAxisId="min" hide />
@@ -375,31 +338,50 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         </Chart>
       )}
 
-      {show('vo2') && (has('vo2max') || has('spo2')) && (
-        <Chart title="VO2max und Blutsauerstoff" hint="VO2max (Cardiofitness) ist einer der stärksten Langlebigkeits-Marker. Blutsauerstoff misst die Watch nachts.">
-          <ComposedChart data={days}>
+      {show('heart') && HEART.some((h) => has(rows, h.key)) && (
+        <Chart title="Herz" hint={`Ø: ${avgText([{ key: 'restingHr', label: 'Ruhepuls', unit: 'bpm' }, { key: 'hrv', label: 'HRV', unit: 'ms' }, { key: 'hrRecovery', label: 'Cardio-Erholung', unit: 'bpm' }])}. Steigende HRV und Erholung, sinkender Ruhepuls = bessere Fitness.`} controls={<Chips items={HEART} on={heartOn} toggle={toggleHeart} />}>
+          <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} minTickGap={24} />
+            {xAxis}
+            <YAxis {...axis} width={32} domain={['dataMin - 5', 'dataMax + 5']} allowDecimals={false} />
+            <Tooltip {...tooltipStyle} />
+            {HEART.filter((h) => heartOn.has(h.key)).map((h) => (
+              <Line key={h.key} dataKey={h.key} name={h.label} stroke={h.color} strokeWidth={2} dot={h.key === 'hrRecovery' ? { r: 2 } : false} connectNulls />
+            ))}
+          </ComposedChart>
+        </Chart>
+      )}
+
+      {show('sleep') && has(rows, 'sleepH') && (
+        <Chart title="Schlaf (h)" hint={`Ø ${average(days, 'sleepH' as any) ?? '–'} h pro Nacht`}>
+          <BarChart data={rows}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            {xAxis}
+            <YAxis {...axis} width={28} />
+            <Tooltip {...tooltipStyle} />
+            <Bar dataKey="sleepH" name="Schlaf (h)" fill="#4C1D95" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </Chart>
+      )}
+
+      {show('vo2') && (has(rows, 'vo2max') || has(rows, 'spo2')) && (
+        <Chart title="VO2max und Blutsauerstoff" hint="VO2max (Cardiofitness) ist einer der stärksten Langlebigkeits-Marker. Blutsauerstoff misst die Watch nachts.">
+          <ComposedChart data={rows}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            {xAxis}
             <YAxis yAxisId="vo2" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={32} allowDecimals={false} />
             <YAxis yAxisId="spo2" orientation="right" {...axis} domain={[90, 100]} width={32} unit="%" />
             <Tooltip {...tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line yAxisId="vo2" dataKey="vo2max" name="VO2max (ml/kg/min)" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />
             <Line yAxisId="spo2" dataKey="spo2" name="Blutsauerstoff %" stroke="#F472B6" dot={false} connectNulls />
           </ComposedChart>
         </Chart>
       )}
 
-      {show('rhr') && has('restingHr') && (
-        <Chart title="Ruhepuls (bpm)">
-          <ComposedChart data={days}>
-            <CartesianGrid stroke="#1e293b" vertical={false} />
-            <XAxis dataKey="label" {...axis} minTickGap={24} />
-            <YAxis {...axis} domain={['dataMin - 3', 'dataMax + 3']} width={36} />
-            <Tooltip {...tooltipStyle} />
-            <Line dataKey="restingHr" name="Ruhepuls" stroke="#F472B6" dot={false} connectNulls />
-          </ComposedChart>
-        </Chart>
+      {entries.length === 0 && !error && (
+        <Card>
+          <p className="text-sm text-slate-400">Noch keine Daten im Zeitraum.</p>
+        </Card>
       )}
     </div>
   );

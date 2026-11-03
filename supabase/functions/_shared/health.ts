@@ -33,7 +33,7 @@ export interface HealthParseResult {
   warnings: string[];
 }
 
-type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2';
+type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2' | 'hr_recovery';
 
 const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' | 'mean'; min: number; max: number }> = {
   weight: { unit: 'kg', pick: 'first', min: 25, max: 300 }, // erste Messung des Tages = morgens
@@ -42,6 +42,7 @@ const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' 
   hrv: { unit: 'ms', pick: 'mean', min: 5, max: 300 },
   vo2max: { unit: 'ml/kg/min', pick: 'last', min: 10, max: 95 },
   spo2: { unit: '%', pick: 'mean', min: 70, max: 100 },
+  hr_recovery: { unit: 'bpm', pick: 'last', min: 3, max: 100 }, // Cardio-Erholung: Pulsabfall 1 min nach dem Training
 };
 
 /** Liest eine Liste aus Text (Zeilen) oder Array. */

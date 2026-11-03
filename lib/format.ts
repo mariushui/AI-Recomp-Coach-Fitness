@@ -32,6 +32,7 @@ const HEALTH_LABEL: Record<string, string> = {
   vo2max: 'VO2max',
   exercise_min: 'Trainingsminuten',
   spo2: 'Blutsauerstoff',
+  hr_recovery: 'Cardio-Erholung',
   sleep: 'Schlaf',
   steps: 'Schritte',
   active_kcal: 'Aktive Kalorien',

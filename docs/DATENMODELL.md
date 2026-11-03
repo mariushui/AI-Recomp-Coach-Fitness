@@ -48,7 +48,7 @@ Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 �
 
 **note**: `text`, `tags[]`.
 
-**health** (aus Apple Health, ein Eintrag pro Kennzahl und Tag): `metric` (weight, body_fat, resting_hr, hrv, vo2max, spo2, steps, active_kcal, exercise_min, sleep), `value`, `unit`, bei Schlaf `stages` in Minuten.
+**health** (aus Apple Health, ein Eintrag pro Kennzahl und Tag): `metric` (weight, body_fat, resting_hr, hrv, vo2max, spo2, hr_recovery, steps, active_kcal, exercise_min, sleep), `value`, `unit`, bei Schlaf `stages` in Minuten.
 `external_id` = `<metric>:<YYYY-MM-DD>`. Ein neuer Sync überschreibt den Tageswert.
 
 ## Regeln für Tageswerte (Auswertung)

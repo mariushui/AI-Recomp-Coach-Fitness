@@ -28,7 +28,7 @@ App **Kurzbefehle** öffnen, **+**, Name: **Recomp Health** (genau so, die App s
 
 ### Baustein pro Kennzahl
 
-Diesen Block baust du 6-mal, je einmal für:
+Diesen Block baust du 7-mal, je einmal für:
 
 | Kennzahl | Typ in Health | Variablen-Namen |
 |---|---|---|
@@ -38,6 +38,7 @@ Diesen Block baust du 6-mal, je einmal für:
 | HRV | Herzfrequenzvariabilität (Heart Rate Variability) | `HW` und `HD` |
 | VO2max | Cardiofitness (VO2 Max) | `VW` und `VD` |
 | Blutsauerstoff | Blutsauerstoff (Blood Oxygen) | `BW` und `BD` |
+| Cardio-Erholung (HRR) | Cardio-Erholung (Cardio Recovery) | `CW` und `CD` |
 
 Für Gewicht sieht der Block so aus:
 
@@ -98,6 +99,7 @@ Den Ring „Stehen“ lassen wir weg.
    | `hrv` | Wörterbuch | `values` = `HW`, `dates` = `HD` |
    | `vo2max` | Wörterbuch | `values` = `VW`, `dates` = `VD` |
    | `spo2` | Wörterbuch | `values` = `BW`, `dates` = `BD` |
+   | `hr_recovery` | Wörterbuch | `values` = `CW`, `dates` = `CD` |
    | `steps` | Wörterbuch | `values` = `TW`, `dates` = `TD`, `sources` = `TQ` |
    | `active_kcal` | Wörterbuch | `values` = `AW`, `dates` = `AD`, `sources` = `AQ` |
    | `exercise_min` | Wörterbuch | `values` = `EW`, `dates` = `ED`, `sources` = `EQ` |

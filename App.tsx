@@ -16,7 +16,7 @@ const TABS: { id: Tab; label: string; icon: (typeof Icons)['Plus'] }[] = [
   { id: 'log', label: 'Erfassen', icon: Icons.Plus },
   { id: 'calendar', label: 'Kalender', icon: Icons.Calendar },
   { id: 'trends', label: 'Verlauf', icon: Icons.Chart },
-  { id: 'settings', label: 'Mehr', icon: Icons.Gear },
+  { id: 'settings', label: 'Einstellungen', icon: Icons.Gear },
 ];
 
 function App() {
