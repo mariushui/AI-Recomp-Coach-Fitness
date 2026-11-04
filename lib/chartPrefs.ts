@@ -6,14 +6,12 @@ export const CHARTS = [
   { key: 'body', label: 'Gewicht und Körper' },
   { key: 'nutrition', label: 'Ernährung' },
   { key: 'measures', label: 'Umfänge und Hautfalten' },
-  { key: 'meals', label: 'Ernährung nach Mahlzeit' },
+  { key: 'meals', label: 'Makros je Mahlzeit' },
   { key: 'training', label: 'Training und Plan' },
   { key: 'activity', label: 'Aktivität' },
-  { key: 'heart', label: 'Herz' },
+  { key: 'heart', label: 'Herz und Cardiofitness' },
   { key: 'sleep', label: 'Schlaf' },
-  { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
   { key: 'recovery', label: 'Erholung und Belastung' },
-  { key: 'balance', label: 'Potenzial genutzt' },
 ] as const;
 export type ChartKey = (typeof CHARTS)[number]['key'];
 export const CHART_LABEL = Object.fromEntries(CHARTS.map((c) => [c.key, c.label])) as Record<ChartKey, string>;

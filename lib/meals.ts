@@ -93,3 +93,64 @@ export function slotSeries(entries: Entry[], macro: Macro, key: (iso: string) =>
   }
   return out;
 }
+
+export interface MacroSplit {
+  protein: number; // Anteil an den Makro-kcal in Prozent
+  carbs: number;
+  fat: number;
+  kcal: number; // kcal aus den drei Makros (Protein und KH 4, Fett 9)
+}
+
+/** Verteilung der Makros nach Kalorien, auf 100 % gerechnet. */
+export function splitOf(g: { protein: number; carbs: number; fat: number }): MacroSplit | undefined {
+  const p = g.protein * 4;
+  const c = g.carbs * 4;
+  const f = g.fat * 9;
+  const total = p + c + f;
+  if (!(total > 0)) return undefined;
+  const pp = Math.round((p / total) * 100);
+  const fp = Math.round((f / total) * 100);
+  return { protein: pp, fat: fp, carbs: 100 - pp - fp, kcal: Math.round(total) };
+}
+
+/** Je Zeiteinheit die Makro-Verteilung der gewählten Mahlzeiten. key(iso) liefert den Schlüssel der Zeile. */
+export function macroSplitSeries(entries: Entry[], slots: Set<Slot>, key: (iso: string) => string): Map<string, MacroSplit> {
+  const sums = new Map<string, { protein: number; carbs: number; fat: number }>();
+  for (const e of entries) {
+    if (e.kind !== 'meal' || !slots.has(slotOf(e))) continue;
+    const d = e.data as MealData;
+    const k = key(e.occurred_at);
+    const s = sums.get(k) ?? { protein: 0, carbs: 0, fat: 0 };
+    s.protein += d.protein_g ?? 0;
+    s.carbs += d.carbs_g ?? 0;
+    s.fat += d.fat_g ?? 0;
+    sums.set(k, s);
+  }
+  const out = new Map<string, MacroSplit>();
+  for (const [k, s] of sums) {
+    const sp = splitOf(s);
+    if (sp) out.set(k, sp);
+  }
+  return out;
+}
+
+/** Verteilung je Mahlzeit über den ganzen Zeitraum, um zu sehen, welche Mahlzeit vom Ziel abweicht. */
+export function splitBySlot(entries: Entry[]): Partial<Record<Slot, MacroSplit>> {
+  const out: Partial<Record<Slot, MacroSplit>> = {};
+  for (const s of SLOTS) {
+    const one = macroSplitSeries(entries, new Set([s]), () => 'alle').get('alle');
+    if (one) out[s] = one;
+  }
+  return out;
+}
+
+/** Zielverteilung aus den Zielen in Gramm. Fehlen KH- oder Fett-Ziel: Fett 30 % der kcal, Rest KH. */
+export function targetSplit(goals: { protein?: number | null; carbs?: number | null; fat?: number | null; kcal?: number | null }): MacroSplit | undefined {
+  if (goals.protein && goals.carbs && goals.fat) return splitOf({ protein: goals.protein, carbs: goals.carbs, fat: goals.fat });
+  if (goals.protein && goals.kcal) {
+    const fat = (goals.kcal * 0.3) / 9;
+    const carbs = Math.max(0, (goals.kcal - goals.protein * 4 - fat * 9) / 4);
+    return splitOf({ protein: goals.protein, carbs, fat });
+  }
+  return undefined;
+}

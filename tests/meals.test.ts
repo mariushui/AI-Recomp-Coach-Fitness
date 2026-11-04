@@ -43,3 +43,30 @@ describe('mealBreakdown', () => {
     expect(s.get('2026-11-04')!.fruehstueck).toBe(20);
   });
 });
+
+describe('Makro-Verteilung je Mahlzeit', () => {
+  it('Anteile nach kcal, zusammen 100 %', async () => {
+    const { splitOf } = await import('../lib/meals');
+    // 30 g P = 120, 50 g KH = 200, 20 g F = 180, Summe 500
+    expect(splitOf({ protein: 30, carbs: 50, fat: 20 })).toEqual({ protein: 24, fat: 36, carbs: 40, kcal: 500 });
+    expect(splitOf({ protein: 0, carbs: 0, fat: 0 })).toBeUndefined();
+  });
+  it('nur gewählte Mahlzeiten zählen', async () => {
+    const { macroSplitSeries, splitBySlot } = await import('../lib/meals');
+    const list = [
+      m('2026-11-04T08:00:00+01:00', { description: 'F', meal_type: 'fruehstueck', protein_g: 10, carbs_g: 80, fat_g: 10 }),
+      m('2026-11-04T13:00:00+01:00', { description: 'M', meal_type: 'mittag', protein_g: 50, carbs_g: 50, fat_g: 10 }),
+    ];
+    const only = macroSplitSeries(list, new Set(['mittag'] as const), () => 'd');
+    expect(only.get('d')).toEqual({ protein: 41, fat: 18, carbs: 41, kcal: 490 });
+    const by = splitBySlot(list);
+    expect(by.fruehstueck?.carbs).toBe(71); // 40 + 320 + 90 kcal
+    expect(by.abend).toBeUndefined();
+  });
+  it('Zielverteilung aus Gramm-Zielen oder aus Protein und kcal', async () => {
+    const { targetSplit } = await import('../lib/meals');
+    expect(targetSplit({ protein: 135, carbs: 300, fat: 85 })).toEqual({ protein: 22, fat: 31, carbs: 47, kcal: 2505 }) // 540 + 1.200 + 765 kcal;
+    expect(targetSplit({ protein: 150, kcal: 2500 })).toEqual({ protein: 24, fat: 30, carbs: 46, kcal: 2500 });
+    expect(targetSplit({})).toBeUndefined();
+  });
+});
