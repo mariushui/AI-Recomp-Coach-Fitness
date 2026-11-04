@@ -8,12 +8,12 @@ describe('Jackson-Pollock 7', () => {
     expect(skinfoldSum(folds)).toBe(110);
     expect(skinfoldSum({ ...folds, thigh: undefined })).toBeUndefined();
   });
-  it('Mann, 45 Jahre, Summe 110 mm: Dichte 1,0602, etwa 16,9 %', () => {
-    // 1,112 - 0,00043499*110 + 0,00000055*12100 - 0,00028826*45 = 1,06024; 495/1,06024 - 450 = 16,9
-    expect(jacksonPollock7(folds, 45, 'm')).toBe(16.9);
+  it('Mann, 45 Jahre, Summe 110 mm: Dichte 1,0578, etwa 17,9 %', () => {
+    // 1,112 - 0,00043499*110 + 0,00000055*12100 - 0,00028826*45 = 1,05783; 495/1,05783 - 450 = 17,9
+    expect(jacksonPollock7(folds, 45, 'm')).toBe(17.9);
   });
   it('Frau mit gleichen Werten liegt höher', () => {
-    expect(jacksonPollock7(folds, 45, 'w')!).toBeGreaterThan(16.9);
+    expect(jacksonPollock7(folds, 45, 'w')!).toBeGreaterThan(17.9);
   });
   it('ohne Alter kein Ergebnis', () => {
     expect(jacksonPollock7(folds, undefined)).toBeUndefined();
