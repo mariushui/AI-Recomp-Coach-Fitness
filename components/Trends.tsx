@@ -10,7 +10,8 @@ import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
-import { loadCharts } from '../lib/chartPrefs';
+import { CHART_LABEL, loadCharts, loadOrder, normalizeOrder, saveOrder, type ChartKey } from '../lib/chartPrefs';
+import SortableList from './SortableList';
 import { addDays, dayKey, startOfDay, weekKey } from '../lib/time';
 const weekOf = (day: string) => weekKey(new Date(day + 'T12:00:00'));
 import { aggregate, buckets, granularityFor, trainingRows } from './trendData';
@@ -197,6 +198,39 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   }, [range, refreshKey]);
 
   const show = (k: string) => charts.has(k);
+  const [order, setOrder] = useState<ChartKey[]>(loadOrder);
+  const [sortMode, setSortMode] = useState(false);
+  // Langes Drücken (0,5 s) auf ein Diagramm öffnet die Sortierliste. Bewegt sich der Finger vorher, ist es Scrollen.
+  const press = React.useRef<{ t: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
+  const cancelPress = () => {
+    if (press.current) clearTimeout(press.current.t);
+    press.current = null;
+  };
+  const longPress = {
+    onPointerDown: (e: React.PointerEvent) => {
+      cancelPress();
+      press.current = {
+        x: e.clientX,
+        y: e.clientY,
+        t: setTimeout(() => {
+          press.current = null;
+          try {
+            navigator.vibrate?.(15);
+          } catch {
+            /* nicht überall verfügbar */
+          }
+          setSortMode(true);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 500),
+      };
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8) cancelPress();
+    },
+    onPointerUp: cancelPress,
+    onPointerCancel: cancelPress,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  };
 
   const data = useMemo(() => {
     const days = dailyStats(entries, from, to).map((d) => ({ ...d, bmi: bmi(d.weight, heightCm) }));
@@ -285,30 +319,11 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   };
   const xAxis = <XAxis dataKey="label" {...axis} minTickGap={range <= 7 ? 0 : 20} interval={range <= 7 ? 0 : 'preserveStartEnd'} />;
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display font-bold text-slate-100">Verlauf</h2>
-        <span className="text-[11px] text-slate-500">Diagramme wählst du unter Einstellungen</span>
-      </div>
-      <div className="flex gap-2">
-        {RANGES.map((r) => (
-          <button
-            key={r}
-            onClick={() => setRange(r)}
-            className={`flex-1 rounded-xl py-2 text-xs font-bold ${range === r ? 'bg-cyber-purple text-white' : 'bg-white/5 text-slate-400'}`}
-          >
-            {RANGE_LABEL[r]}
-          </button>
-        ))}
-      </div>
-      {g !== 'day' && <p className="text-[11px] text-slate-500 -mt-2">Ein Wert pro Woche: Mittelwert, Training als Summe.</p>}
-      {error && <ErrorBox>{error}</ErrorBox>}
-
-      {show('rings') && range <= 30 && (
+  const sections: Partial<Record<ChartKey, React.ReactNode>> = {
+    rings: show('rings') && range <= 30 && (
         <Chart
           plain
-          title="Ring-Kalender"
+          title={CHART_LABEL.rings}
           summary={ringMode === 'recovery' ? 'Erholung je Tag, 0 bis 100' : ringMode === 'strain' ? 'Belastung je Tag, 0 bis 10' : 'Schlaf je Nacht in Prozent von 9 h'}
           controls={
             <div className="flex gap-1.5">
@@ -322,11 +337,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         >
           <RingCalendar days={ringDays} today={todayKey} />
         </Chart>
-      )}
-
-      {show('body') && has(rows, 'weight') && (
+      ),
+    body: show('body') && has(rows, 'weight') && (
         <Chart
-          title="Gewicht und Körper"
+          title={CHART_LABEL.body}
           hint={`${g === 'day' ? 'Linien = 7-Tage-Schnitt, Punkte = Tageswert. ' : ''}Jede kg-Linie ist für sich skaliert, damit Trends sichtbar werden. Genaue Werte beim Antippen. Linke Achse: Gewicht, rechte Achse: % und BMI.${heightCm ? '' : ' Für den BMI unter Einstellungen die Körpergröße eintragen.'}`}
           controls={<Chips items={BODY} on={bodyOn} toggle={toggleBody} />}
         >
@@ -359,10 +373,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             ))}
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('nutrition') && MACROS.some((m) => has(rows, m.key)) && (
-        <Chart title="Ernährung" summary={`Ø pro Tag: ${avgText(MACROS)}`} controls={<Chips items={MACROS} on={macroOn} toggle={toggleMacro} />}>
+      ),
+    nutrition: show('nutrition') && MACROS.some((m) => has(rows, m.key)) && (
+        <Chart title={CHART_LABEL.nutrition} summary={`Ø pro Tag: ${avgText(MACROS)}`} controls={<Chips items={MACROS} on={macroOn} toggle={toggleMacro} />}>
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -388,11 +401,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             ))}
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('measures') && ['waist', 'chest', 'hip', 'arm', 'skinfoldSum'].some((k) => has(rows, k)) && (
+      ),
+    measures: show('measures') && ['waist', 'chest', 'hip', 'arm', 'skinfoldSum'].some((k) => has(rows, k)) && (
         <Chart
-          title="Umfänge und Hautfalten"
+          title={CHART_LABEL.measures}
           summary={(() => {
             const first = (k: string) => (days as any[]).find((d) => typeof d[k] === 'number')?.[k];
             const last = (k: string) => [...(days as any[])].reverse().find((d) => typeof d[k] === 'number')?.[k];
@@ -419,12 +431,11 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Line yAxisId="mm" dataKey="skinfoldSum" name="Hautfalten mm" stroke="#F472B6" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('meals') && mealTable.days > 0 && (
+      ),
+    meals: show('meals') && mealTable.days > 0 && (
         <Chart
           plain
-          title="Ernährung nach Mahlzeit"
+          title={CHART_LABEL.meals}
           summary={`${mealTable.proteinMealsPerDay.toLocaleString('de-DE')} proteinreiche Mahlzeiten pro Tag (ab 30 g)`}
           hint="Balken: wie sich der gewählte Nährwert auf Frühstück, Mittag, Abend und Snacks verteilt. Ohne Angabe der Mahlzeit entscheidet die Uhrzeit, Shakes und Ergänzungen zählen zu Snacks. Tabelle: Mittel pro Tag mit Essen im Zeitraum. Für die Recomposition zählen Protein über den Tag verteilt und ein Kaloriendefizit, Kohlenhydrate eher dort, wo du Konzentration oder Training brauchst."
           controls={
@@ -497,11 +508,11 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             </table>
           </div>
         </Chart>
-      )}
-
-      {show('training') && sportsUsed.length > 0 && (
+      ),
+    training: show('training') && sportsUsed.length > 0 && (
         <Chart
-          title={g === 'day' ? 'Training pro Tag (min)' : 'Training pro Woche (min)'}
+          title={CHART_LABEL.training}
+          summary={g === 'day' ? 'Minuten pro Tag' : 'Minuten pro Woche'}
           hint={`Volle Farbe = trainiert, Schatten = geplant, aber nicht trainiert.${data.planTotal ? ` Plan bis heute: ${data.planDone} von ${data.planTotal} Einheiten erledigt.` : ''}`}
           controls={<Chips items={sportsUsed.map((s) => ({ key: s, label: SPORT_LABEL[s], color: SPORT_COLORS[s] }))} on={sportOn} toggle={toggleSport} />}
         >
@@ -518,10 +529,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
               ])}
           </BarChart>
         </Chart>
-      )}
-
-      {show('activity') && ACTIVITY.some((a) => has(rows, a.key)) && (
-        <Chart title="Aktivität" summary={`Ø pro Tag: ${avgText([{ key: 'steps', label: 'Schritte' }, { key: 'activeKcal', label: 'Bewegen', unit: 'kcal' }, { key: 'exerciseMin', label: 'Trainieren', unit: 'min' }])}`} controls={<Chips items={ACTIVITY} on={activityOn} toggle={toggleActivity} />}>
+      ),
+    activity: show('activity') && ACTIVITY.some((a) => has(rows, a.key)) && (
+        <Chart title={CHART_LABEL.activity} summary={`Ø pro Tag: ${avgText([{ key: 'steps', label: 'Schritte' }, { key: 'activeKcal', label: 'Bewegen', unit: 'kcal' }, { key: 'exerciseMin', label: 'Trainieren', unit: 'min' }])}`} controls={<Chips items={ACTIVITY} on={activityOn} toggle={toggleActivity} />}>
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -534,10 +544,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             {activityOn.has('exerciseMin') && <Line yAxisId="min" dataKey="exerciseMin" name="Trainieren (min)" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />}
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('heart') && HEART.some((h) => has(rows, h.key)) && (
-        <Chart title="Herz" summary={`Ø: ${avgText([{ key: 'restingHr', label: 'Ruhepuls', unit: 'bpm' }, { key: 'hrv', label: 'HRV', unit: 'ms' }, { key: 'hrRecovery', label: 'Cardio-Erholung', unit: 'bpm' }])}`} hint="Steigende HRV und Cardio-Erholung sowie ein sinkender Ruhepuls zeigen bessere Fitness. Cardio-Erholung = Pulsabfall in der ersten Minute nach dem Training." controls={<Chips items={HEART} on={heartOn} toggle={toggleHeart} />}>
+      ),
+    heart: show('heart') && HEART.some((h) => has(rows, h.key)) && (
+        <Chart title={CHART_LABEL.heart} summary={`Ø: ${avgText([{ key: 'restingHr', label: 'Ruhepuls', unit: 'bpm' }, { key: 'hrv', label: 'HRV', unit: 'ms' }, { key: 'hrRecovery', label: 'Cardio-Erholung', unit: 'bpm' }])}`} hint="Steigende HRV und Cardio-Erholung sowie ein sinkender Ruhepuls zeigen bessere Fitness. Cardio-Erholung = Pulsabfall in der ersten Minute nach dem Training." controls={<Chips items={HEART} on={heartOn} toggle={toggleHeart} />}>
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -548,10 +557,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             ))}
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('sleep') && has(rows, 'sleepH') && (
-        <Chart title="Schlaf (h)" summary={`Ø ${average(days, 'sleepH' as any) ?? '–'} h pro Nacht`}>
+      ),
+    sleep: show('sleep') && has(rows, 'sleepH') && (
+        <Chart title={CHART_LABEL.sleep} summary={`Ø ${average(days, 'sleepH' as any) ?? '–'} h pro Nacht`}>
           <BarChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -560,10 +568,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Bar dataKey="sleepH" name="Schlaf (h)" fill="#4C1D95" radius={[3, 3, 0, 0]} />
           </BarChart>
         </Chart>
-      )}
-
-      {show('vo2') && (has(rows, 'vo2max') || has(rows, 'spo2')) && (
-        <Chart title="VO2max und Blutsauerstoff" hint="VO2max (Cardiofitness) ist einer der stärksten Langlebigkeits-Marker. Blutsauerstoff misst die Watch nachts.">
+      ),
+    vo2: show('vo2') && (has(rows, 'vo2max') || has(rows, 'spo2')) && (
+        <Chart title={CHART_LABEL.vo2} hint="VO2max (Cardiofitness) ist einer der stärksten Langlebigkeits-Marker. Blutsauerstoff misst die Watch nachts.">
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
@@ -574,11 +581,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Line yAxisId="spo2" dataKey="spo2" name="Blutsauerstoff %" stroke="#F472B6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('recovery') && (has(rows, 'recovery') || has(rows, 'strain')) && (
+      ),
+    recovery: show('recovery') && (has(rows, 'recovery') || has(rows, 'strain')) && (
         <Chart
-          title="Erholung und Belastung"
+          title={CHART_LABEL.recovery}
           summary={`Ø Erholung ${average(days, 'recovery' as any) ?? '–'} · Ø Belastung ${average(days, 'strain' as any) ?? '–'} pro Tag`}
           hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Punkte: grün ab 67, gelb ab 34, rot darunter. Belastung (0 bis 10, Marathon = 10) aus Trainingsminuten mal RPE, ohne RPE gilt ein Wert je Sportart. Das graue Band ist der Zielbereich der Belastung, er steigt mit der Erholung. Belastung im Band = passend trainiert, darüber bei roter Erholung ist das Muster, das du vermeiden willst."
         >
@@ -593,11 +599,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Line yAxisId="strain" dataKey="strain" name="Belastung" stroke="#38BDF8" strokeWidth={2} dot={{ r: 2.5, fill: '#38BDF8', stroke: 'none' }} connectNulls />
           </ComposedChart>
         </Chart>
-      )}
-
-      {show('balance') && has(rows, 'balance') && (
+      ),
+    balance: show('balance') && has(rows, 'balance') && (
         <Chart
-          title="Balance: Belastung zu Erholung"
+          title={CHART_LABEL.balance}
           summary={`${balanceLabel(lastBalance).text} · Ø Belastung 7 Tage ${strainAvg(7)?.toLocaleString('de-DE') ?? '–'}, 28 Tage ${strainAvg(28)?.toLocaleString('de-DE') ?? '–'}`}
           hint="7-Tage-Mittel von Belastung minus Mitte deines Zielbereichs. Im grauen Band trainierst du passend zur Erholung. Rot darüber = Überlastung, blau darunter = erholsam mit Luft nach oben. Die Zahlen rechts: mittlere Belastung der letzten 7 und 28 Tage, kurzfristig deutlich über langfristig heißt steiler Anstieg."
         >
@@ -613,6 +618,55 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <Line dataKey="balance" name="Balance" stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls />
           </ComposedChart>
         </Chart>
+      ),
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display font-bold text-slate-100">Verlauf</h2>
+        <span className="text-[11px] text-slate-500">Lange drücken zum Umsortieren</span>
+      </div>
+      <div className="flex gap-2">
+        {RANGES.map((r) => (
+          <button
+            key={r}
+            onClick={() => setRange(r)}
+            className={`flex-1 rounded-xl py-2 text-xs font-bold ${range === r ? 'bg-cyber-purple text-white' : 'bg-white/5 text-slate-400'}`}
+          >
+            {RANGE_LABEL[r]}
+          </button>
+        ))}
+      </div>
+      {g !== 'day' && <p className="text-[11px] text-slate-500 -mt-2">Ein Wert pro Woche: Mittelwert, Training als Summe.</p>}
+      {error && <ErrorBox>{error}</ErrorBox>}
+
+      {sortMode ? (
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Reihenfolge</p>
+            <button type="button" onClick={() => setSortMode(false)} className="rounded-lg bg-cyber-green px-3 py-1.5 text-xs font-bold text-cyber-black">
+              Fertig
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">Am Griff ☰ ziehen oder Pfeile nutzen. Gilt auch für die Einstellungen.</p>
+          <SortableList
+            items={order.map((k) => ({ key: k, label: CHART_LABEL[k], muted: !show(k) }))}
+            onChange={(keys) => {
+              const next = normalizeOrder(keys);
+              setOrder(next);
+              saveOrder(next);
+            }}
+          />
+        </Card>
+      ) : (
+        order.map((k) =>
+          sections[k] ? (
+            <div key={k} {...longPress} className="select-none" style={{ WebkitTouchCallout: 'none' }}>
+              {sections[k]}
+            </div>
+          ) : null,
+        )
       )}
 
       {entries.length === 0 && !error && (
