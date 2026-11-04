@@ -147,6 +147,46 @@ export function balanceLabel(b: number | undefined): { text: string; color: stri
   return { text: 'passend trainiert', color: '#ADFF2F' };
 }
 
+/** Farbe je Tag: Belastung unter, im oder über dem Zielbereich, der sich aus der Erholung ergibt. */
+export const ZONE_COLOR = { unter: '#64748b', 'im Ziel': '#ADFF2F', über: '#FF6B00' } as const;
+
+export interface Potential {
+  days: number; // Tage mit Erholungswert im Fenster
+  inTarget: number;
+  over: number;
+  under: number;
+  pct: number; // genutztes Potenzial: Belastung geteilt durch Mitte des Zielbereichs, im Schnitt, 100 = genau die Mitte
+  text: string;
+  color: string;
+}
+
+/**
+ * Wie bei Athlytic: Habe ich mein Potenzial genutzt? Letzte 7 Tage mit Erholungswert.
+ * Je Tag Belastung / Mitte des Zielbereichs (höchstens 150 %), Ruhetage zählen mit 0 %.
+ * Ab 3 Tagen über dem Ziel oder über 115 % im Schnitt: zu viel. Ab 85 %: gut genutzt. Darunter: Luft nach oben.
+ */
+export function potentialSummary(days: { recovery?: number; strain?: number }[], window = 7): Potential | undefined {
+  const list = days.filter((d) => typeof d.recovery === 'number').slice(-window);
+  if (!list.length) return undefined;
+  let sum = 0;
+  let inTarget = 0;
+  let over = 0;
+  let under = 0;
+  for (const d of list) {
+    const t = strainTarget(d.recovery)!;
+    const s = d.strain ?? 0;
+    sum += Math.min(1.5, s / ((t.lo + t.hi) / 2));
+    const z = strainVsTarget(s, t);
+    if (z === 'im Ziel') inTarget++;
+    else if (z === 'über') over++;
+    else under++;
+  }
+  const pct = Math.round((sum / list.length) * 100);
+  const [text, color] =
+    over >= 3 || pct > 115 ? ['zu viel, Erholung einplanen', '#FF6B00'] : pct >= 85 ? ['Potenzial gut genutzt', '#ADFF2F'] : ['Luft nach oben', '#94a3b8'];
+  return { days: list.length, inTarget, over, under, pct, text, color };
+}
+
 export const SLEEP_FULL_H = 9; // 9 h Schlaf = 100 %, 7 h 30 = 83 %
 
 /** Schlaf der Nacht in Prozent eines vollen Schlafs. */

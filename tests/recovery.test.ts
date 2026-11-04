@@ -124,3 +124,27 @@ describe('Balance Belastung zu Erholung', () => {
     expect(balanceLabel(0.5).text).toBe('passend trainiert');
   });
 });
+
+describe('Potenzial genutzt', () => {
+  it('Belastung durch Mitte des Zielbereichs, Ruhetage zählen 0', async () => {
+    const { potentialSummary, strainTarget } = await import('../lib/recovery');
+    const t = strainTarget(100)!; // 6,1 bis 8,5, Mitte 7,3
+    expect(t).toEqual({ lo: 6.1, hi: 8.5 });
+    const week = Array.from({ length: 7 }, (_, i) => ({ recovery: 100, strain: i < 5 ? 7.3 : undefined }));
+    const p = potentialSummary(week)!;
+    expect(p.pct).toBe(71); // 5 x 100 % + 2 x 0 %, geteilt durch 7
+    expect(p.inTarget).toBe(5);
+    expect(p.under).toBe(2);
+    expect(p.text).toBe('Luft nach oben');
+  });
+  it('drei Tage über dem Ziel heißt zu viel', async () => {
+    const { potentialSummary } = await import('../lib/recovery');
+    const p = potentialSummary([{ recovery: 30, strain: 8 }, { recovery: 30, strain: 8 }, { recovery: 30, strain: 8 }, { recovery: 70, strain: 5 }])!;
+    expect(p.over).toBe(3);
+    expect(p.text).toBe('zu viel, Erholung einplanen');
+  });
+  it('ohne Erholungswerte kein Ergebnis', async () => {
+    const { potentialSummary } = await import('../lib/recovery');
+    expect(potentialSummary([{ strain: 5 }])).toBeUndefined();
+  });
+});
