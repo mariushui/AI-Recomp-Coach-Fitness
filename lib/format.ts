@@ -66,6 +66,7 @@ export function summarize(kind: EntryKind, data: any): string {
       const w = data as WorkoutData;
       return j([
         w.sport === 'sonstiges' ? w.sport_label ?? 'Training' : SPORT_LABEL[w.sport],
+        w.template,
         w.duration_min !== undefined && `${w.duration_min} min`,
         w.rpe !== undefined && `RPE ${w.rpe}`,
         w.distance_km !== undefined && `${w.distance_km} km`,

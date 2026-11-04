@@ -33,13 +33,36 @@ export const SPORT_CATEGORY: Record<Sport, 'skill' | 'strength' | 'endurance' | 
   sonstiges: 'other',
 };
 
+/** Ein einzelner Satz im Krafttraining. weight_kg ist die Zahl, die Marius einträgt (bei Kurzhanteln je Hand). */
+export interface SetEntry {
+  reps?: number;
+  weight_kg?: number;
+  warmup?: boolean; // Aufwärmsatz, zählt nicht zum Volumen
+}
+
 export interface StrengthSet {
   exercise: string;
-  sets?: number;
+  exercise_id?: string; // Katalog-ID oder eigene Übung
+  sets?: number; // Zusammenfassung, bleibt für Diktat und alte Einträge
   reps?: number;
   weight_kg?: number;
   rpe?: number;
+  set_list?: SetEntry[]; // Satz für Satz aus der Kraft-Eingabe
 }
+
+/** Art der Krafteinheit, für Volumen je Einheitstyp. Beine und Unterkörper sind dasselbe. */
+export const SESSION_KINDS = ['push', 'pull', 'beine', 'oberkoerper', 'ganzkoerper', 'arme', 'rumpf', 'einzel'] as const;
+export type SessionKind = (typeof SESSION_KINDS)[number];
+export const SESSION_KIND_LABEL: Record<SessionKind, string> = {
+  push: 'Push',
+  pull: 'Pull',
+  beine: 'Beine',
+  oberkoerper: 'Oberkörper',
+  ganzkoerper: 'Ganzkörper',
+  arme: 'Arme und Waden',
+  rumpf: 'Rumpf',
+  einzel: 'Einzelübungen',
+};
 
 export interface WorkoutData {
   sport: Sport;
@@ -57,6 +80,8 @@ export interface WorkoutData {
   avg_hr?: number;
   kcal?: number; // aktive Kalorien, meist aus Apple Health
   exercises?: StrengthSet[];
+  session_kind?: SessionKind; // nur Kraft
+  template?: string; // Name der Vorlage, aus der die Einheit stammt
   notes?: string;
 }
 
@@ -293,10 +318,16 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
               .map((e: any) =>
                 clean<StrengthSet>({
                   exercise: str(e.exercise)!,
+                  exercise_id: str(e.exercise_id),
                   sets: num(e.sets),
                   reps: num(e.reps),
                   weight_kg: num(e.weight_kg),
                   rpe: num(e.rpe),
+                  set_list: Array.isArray(e.set_list)
+                    ? e.set_list
+                        .map((x: any) => clean<SetEntry>({ reps: num(x?.reps), weight_kg: num(x?.weight_kg), warmup: x?.warmup === true ? true : undefined }))
+                        .filter((x: SetEntry) => x.reps !== undefined || x.weight_kg !== undefined)
+                    : undefined,
                 }),
               )
           : undefined,
@@ -319,6 +350,8 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         avg_pace: str(raw.avg_pace),
         avg_hr: num(raw.avg_hr),
         kcal: num(raw.kcal),
+        session_kind: (SESSION_KINDS as readonly string[]).includes(raw.session_kind) ? (raw.session_kind as SessionKind) : undefined,
+        template: str(raw.template),
       }) as any;
     }
     case 'body': {

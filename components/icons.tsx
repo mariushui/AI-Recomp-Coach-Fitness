@@ -60,6 +60,7 @@ export const EntryIcon: React.FC<{ kind: EntryKind; data?: any; size?: number; c
 
 export const Icons = {
   Plus: make('Plus'),
+  Barbell: make('Barbell'),
   Calendar: make('CalendarBlank'),
   Chart: make('ChartLineUp'),
   Gear: make('Gear'),
