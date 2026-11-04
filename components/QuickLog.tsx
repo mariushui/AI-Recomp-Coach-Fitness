@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { EntryKind, EntrySource, NewEntry } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
 import { insertEntries, parseText } from '../lib/entries';
+import { addParseJob, subscribeJobs } from '../lib/backgroundJobs';
 import { prepareImage, type PreparedImage } from '../lib/image';
 import { insertSlots } from '../lib/planSlotsApi';
 import { slotsFromDrafts } from '../lib/planTemplate';
@@ -106,9 +107,33 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
     }
   };
 
+  // Rückfragen und Fehler aus dem Hintergrund-Erkennen hier anzeigen
+  useEffect(
+    () =>
+      subscribeJobs((e) => {
+        if (e.type === 'done' && e.job.type === 'parse') setQuestions(e.questions ?? []);
+        if (e.type === 'error' && e.job.type === 'parse') {
+          setText((cur) => (cur.trim() ? cur : e.job.text));
+          setError(`Erkennen hat nicht geklappt: ${e.message} Der Text steht wieder im Feld.`);
+        }
+      }),
+    [],
+  );
+
+  // Wochenplan ("jeden Dienstag ...") braucht die Frage, ob er in den Trainingsplan soll. Alles andere läuft im Hintergrund.
+  const isWeeklyPlan = (t: string) => /(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(t);
+
   const analyse = async () => {
     setError(null);
     setSaved(null);
+    if (!isWeeklyPlan(text)) {
+      addParseJob(text, photo ? 'photo' : usedVoice ? 'voice' : 'text', photo?.image);
+      setText('');
+      setPhoto(null);
+      setUsedVoice(false);
+      setQuestions([]);
+      return;
+    }
     setBusy('parse');
     try {
       const r = await parseText(text, photo?.image);
@@ -238,7 +263,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
         )}
         <div className="flex gap-2 mt-3">
           <Button className="flex-1" onClick={analyse} disabled={(!text.trim() && !photo) || busy !== null}>
-            {busy === 'parse' ? 'Erkenne …' : busy === 'photo' ? 'Lade Foto …' : photo ? 'Foto auswerten' : 'Erkennen'}
+            {busy === 'parse' ? 'Erkenne …' : busy === 'photo' ? 'Lade Foto …' : photo ? 'Foto auswerten und speichern' : 'Erkennen und speichern'}
           </Button>
           {text.trim() && (
             <Button variant="ghost" onClick={saveAsNote} disabled={busy !== null}>

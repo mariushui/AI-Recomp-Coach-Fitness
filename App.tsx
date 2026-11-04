@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { isConfigured, supabase } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
@@ -7,6 +7,7 @@ import CalendarView from './components/CalendarView';
 import Settings from './components/Settings';
 import { Card } from './components/ui';
 import { Icons } from './components/icons';
+import JobToast from './components/JobToast';
 import { insertEntries, listStrengthHistory } from './lib/entries';
 import { cacheHistory } from './lib/strengthTemplates';
 import { flush, queuedCount } from './lib/offlineQueue';
@@ -47,6 +48,10 @@ function App() {
   const [tab, setTab] = useState<Tab>('log');
   const [refreshKey, setRefreshKey] = useState(0);
   const [waiting, setWaiting] = useState(() => queuedCount());
+  const bump = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    setWaiting(queuedCount());
+  }, []);
 
   // Offline gespeicherte Einträge senden: beim Start und sobald wieder Netz da ist
   useEffect(() => {
@@ -108,10 +113,6 @@ function App() {
   if (!ready) return null;
   if (!session) return <AuthScreen />;
 
-  const bump = () => {
-    setRefreshKey((k) => k + 1);
-    setWaiting(queuedCount());
-  };
 
   return (
     <div className="min-h-screen pb-24">
@@ -153,6 +154,8 @@ function App() {
         )}
         {tab === 'settings' && <Settings session={session} onDataChanged={bump} />}
       </main>
+
+      <JobToast onDone={bump} />
 
       <nav className="fixed bottom-0 inset-x-0 z-10 bg-cyber-gray/95 backdrop-blur border-t border-white/5 pb-[env(safe-area-inset-bottom)]">
         <div className="max-w-xl mx-auto grid grid-cols-5">

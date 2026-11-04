@@ -8,11 +8,12 @@ import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { cacheTraining, cachedTraining, focusHistory, loadFocusList, loadTemplateMemory, matchTemplate, rememberTemplate, upcomingSessions } from '../lib/trainingPlan';
 import { formatTime, startOfDay } from '../lib/time';
-import SkillLogger, { loadSkillDraft, newSkillDraft, type SkillDraft } from './SkillLogger';
+import SkillLogger, { clearSkillDraft, loadSkillDraft, newSkillDraft, type SkillDraft } from './SkillLogger';
+import TrainingPlanView from './TrainingPlanView';
 import { SPORT_ICON } from './icons';
 import { MUSCLES, MUSCLE_LABEL, allExercises } from '../lib/exercises';
 import { bodyweightAt, exerciseHistory, isStrength, sessionKindOf, sessionSets, sessionVolume, setsOf, setsZone, summarizeSets, usedExercises, weeklyStrength } from '../lib/strength';
-import { cacheHistory, cachedHistory, loadDraft, loadTemplates } from '../lib/strengthTemplates';
+import { cacheHistory, cachedHistory, clearDraft, loadDraft, loadTemplates } from '../lib/strengthTemplates';
 import { flush, queuedCount } from '../lib/offlineQueue';
 import { addDays, weekKey } from '../lib/time';
 import StrengthLogger, { draftFromTemplate, type StrengthDraft } from './StrengthLogger';
@@ -55,6 +56,8 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
   const [skillLogger, setSkillLogger] = useState<SkillDraft | null>(null);
   const [hasSkillDraft, setHasSkillDraft] = useState(() => !!loadSkillDraft());
   const [pickFor, setPickFor] = useState<Entry<'plan'> | null>(null);
+  const [chooser, setChooser] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
   const templates = useMemo(loadTemplates, [logger]);
   const exercises = useMemo(() => allExercises(), [logger]);
 
@@ -119,6 +122,46 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
     if (d) setLogger(d);
   };
 
+  const planTitle = (plan: Entry<'plan'>) => {
+    const p = plan.data as PlanData;
+    const t = p.sport === 'kraft' ? matchTemplate(plan, templates, memory) : undefined;
+    return t?.name ?? (p.sport === 'sonstiges' ? p.sport_label ?? 'Training' : SPORT_LABEL[p.sport]);
+  };
+  const whenLabel = (iso: string) =>
+    `${dayKeyOf(iso) === dayKeyOf(new Date().toISOString()) ? 'Heute' : new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' })} ${formatTime(iso)}`;
+  const time = (iso: string) => new Date(iso).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+
+  // Angefangene Eingaben, die noch nicht gespeichert sind
+  const openDrafts: { kind: string; name: string; since: string; resume: () => void; discard: () => void }[] = [];
+  if (hasDraft) {
+    const d = loadDraft<StrengthDraft>();
+    if (d)
+      openDrafts.push({
+        kind: 'kraft',
+        name: d.templateName ?? 'Krafttraining',
+        since: time(d.startedAt),
+        resume,
+        discard: () => {
+          clearDraft();
+          setHasDraft(false);
+        },
+      });
+  }
+  if (hasSkillDraft) {
+    const d = loadSkillDraft();
+    if (d)
+      openDrafts.push({
+        kind: 'skill',
+        name: SPORT_LABEL[d.sport],
+        since: time(d.startedAt),
+        resume: () => setSkillLogger(d),
+        discard: () => {
+          clearSkillDraft();
+          setHasSkillDraft(false);
+        },
+      });
+  }
+
   const toggleKind = (k: SessionKind) =>
     setKindsOn(() => {
       const n = new Set(activeKinds);
@@ -137,6 +180,16 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
     return { e, w, kind, vol, sets: sessionSets(w), delta: prevVol ? Math.round(((vol - prevVol) / prevVol) * 100) : undefined };
   });
 
+  if (showPlan)
+    return (
+      <TrainingPlanView
+        onClose={() => setShowPlan(false)}
+        onChanged={() => {
+          onSaved();
+        }}
+      />
+    );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -145,30 +198,44 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
       </div>
       {note && <p className="rounded-xl bg-cyber-green/10 border border-cyber-green/30 px-3 py-2 text-xs text-slate-200">{note}</p>}
 
-      {(hasDraft || hasSkillDraft) && (
-        <button
-          type="button"
-          onClick={() => {
-            if (hasDraft) return resume();
-            const d = loadSkillDraft();
-            if (d) setSkillLogger(d);
-          }}
-          className="w-full rounded-xl bg-cyber-green text-cyber-black py-3 font-bold"
-        >
-          {hasDraft ? 'Krafttraining fortsetzen' : `${SPORT_LABEL[loadSkillDraft()?.sport ?? 'tennis']} fortsetzen`}
-        </button>
-      )}
+      {openDrafts.map((o) => (
+        <div key={o.kind} className="flex items-center gap-2 rounded-xl border border-cyber-green/40 bg-cyber-green/10 px-3 py-2.5">
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-bold text-slate-100 truncate">Offen: {o.name}</span>
+            <span className="block text-[11px] text-slate-400">angefangen {o.since}, noch nicht gespeichert</span>
+          </span>
+          <button type="button" onClick={o.resume} className="rounded-lg bg-cyber-green px-3 py-1.5 text-xs font-bold text-cyber-black">
+            Weiter
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm(`${o.name} verwerfen?`)) return;
+              o.discard();
+            }}
+            className="px-1 text-xs text-slate-400"
+          >
+            Verwerfen
+          </button>
+        </div>
+      ))}
+
+      <button type="button" onClick={() => setChooser(true)} className="w-full rounded-2xl bg-cyber-green py-3.5 font-display text-base font-bold text-cyber-black">
+        Training starten
+      </button>
 
       <Card>
-        <Title sub={upcoming.length ? 'Aus deinem Trainingsplan. Antippen, um während des Trainings einzutragen.' : 'Im Plan steht für die nächsten 2 Wochen nichts. Wochenplan im Kalender anlegen.'}>
-          Als Nächstes
-        </Title>
+        <div className="flex items-start justify-between gap-2">
+          <Title sub={upcoming.length ? 'Aus deinem Trainingsplan. Antippen, um während des Trainings einzutragen.' : 'Im Plan steht für die nächsten 2 Wochen nichts.'}>Als Nächstes</Title>
+          <button type="button" onClick={() => setShowPlan(true)} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-xs font-bold text-slate-300">
+            Plan bearbeiten
+          </button>
+        </div>
         <div className="mt-2">
           {upcoming.map((s, i) => {
             const p = s.plan.data as PlanData;
             const Icon = SPORT_ICON[p.sport];
             const t = p.sport === 'kraft' ? matchTemplate(s.plan, templates, memory) : undefined;
-            const today = dayKeyOf(s.plan.occurred_at) === dayKeyOf(new Date().toISOString());
             return (
               <button
                 key={s.plan.id}
@@ -178,42 +245,15 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
               >
                 <Icon size={26} className={i === 0 ? 'text-cyber-purple' : 'text-slate-400'} />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-bold text-slate-100 truncate">{t?.name ?? (p.sport === 'sonstiges' ? p.sport_label : SPORT_LABEL[p.sport])}</span>
+                  <span className="block text-sm font-bold text-slate-100 truncate">{planTitle(s.plan)}</span>
                   <span className="block text-[11px] text-slate-500 truncate">
-                    {today ? 'Heute' : new Date(s.plan.occurred_at).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' })} {formatTime(s.plan.occurred_at)}
+                    {whenLabel(s.plan.occurred_at)}
                     {p.duration_min ? ` · ${p.duration_min} min` : ''}
                     {p.focus && !t ? ` · ${p.focus}` : ''}
                     {p.sport === 'kraft' && !t ? ' · Vorlage wählen' : ''}
                   </span>
                 </span>
                 <span className={`text-xs font-bold shrink-0 ${i === 0 ? 'text-cyber-green' : 'text-slate-500'}`}>{i === 0 ? 'Start' : '›'}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card className="space-y-2">
-        <Title sub="Wenn du etwas trainierst, das nicht im Plan steht.">Ohne Plan</Title>
-        <div className="grid grid-cols-2 gap-2">
-          {templates.map((t) => (
-            <button key={t.id} type="button" onClick={() => start(t)} className="rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-left">
-              <span className="block text-sm font-bold text-slate-100 leading-tight">{t.name}</span>
-              <span className="block text-[11px] mt-0.5" style={{ color: KIND_COLOR[t.kind] }}>
-                {SESSION_KIND_LABEL[t.kind]} · {t.exercises.length} Übungen
-              </span>
-            </button>
-          ))}
-          <button type="button" onClick={() => start(null)} className="rounded-xl border border-dashed border-white/15 px-3 py-2.5 text-left">
-            <span className="block text-sm font-bold text-slate-300">Kraft frei</span>
-            <span className="block text-[11px] text-slate-500 mt-0.5">Übungen selbst wählen</span>
-          </button>
-          {(['tennis', 'capoeira'] as Sport[]).map((sp) => {
-            const Icon = SPORT_ICON[sp];
-            return (
-              <button key={sp} type="button" onClick={() => startSkill(sp)} className="flex items-center gap-2 rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-left">
-                <Icon size={20} className="text-slate-400" />
-                <span className="text-sm font-bold text-slate-100">{SPORT_LABEL[sp]}</span>
               </button>
             );
           })}
@@ -440,6 +480,78 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
             onSaved();
           }}
         />
+      )}
+
+      {chooser && (
+        <div className="fixed inset-0 z-40 bg-black/70 flex items-end" onClick={() => setChooser(false)}>
+          <div className="w-full max-w-xl mx-auto max-h-[85vh] overflow-y-auto rounded-t-3xl bg-cyber-gray border-t border-white/10 p-4 pb-[max(env(safe-area-inset-bottom),16px)] space-y-3" onClick={(e) => e.stopPropagation()}>
+            <p className="font-display font-bold text-slate-100">Was trainierst du?</p>
+            {upcoming[0] && (
+              <button
+                type="button"
+                onClick={() => {
+                  setChooser(false);
+                  openPlan(upcoming[0].plan);
+                }}
+                className="w-full rounded-xl bg-cyber-purple/15 border border-cyber-purple/40 px-3 py-3 text-left"
+              >
+                <span className="block text-[11px] font-bold uppercase tracking-wider text-cyber-purple">Laut Plan</span>
+                <span className="block text-sm font-bold text-slate-100">{planTitle(upcoming[0].plan)}</span>
+                <span className="block text-[11px] text-slate-500">{whenLabel(upcoming[0].plan.occurred_at)}</span>
+              </button>
+            )}
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 pt-1">Kraft</p>
+            <div className="grid grid-cols-2 gap-2">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setChooser(false);
+                    start(t);
+                  }}
+                  className="rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-left"
+                >
+                  <span className="block text-sm font-bold text-slate-100 leading-tight">{t.name}</span>
+                  <span className="block text-[11px] mt-0.5" style={{ color: KIND_COLOR[t.kind] }}>
+                    {SESSION_KIND_LABEL[t.kind]} · {t.exercises.length} Übungen
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setChooser(false);
+                  start(null);
+                }}
+                className="rounded-xl border border-dashed border-white/15 px-3 py-2.5 text-left"
+              >
+                <span className="block text-sm font-bold text-slate-300">Kraft frei</span>
+                <span className="block text-[11px] text-slate-500 mt-0.5">Übungen selbst wählen</span>
+              </button>
+            </div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 pt-1">Technik und Ausdauer</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['tennis', 'capoeira', 'laufen', 'rad'] as Sport[]).map((sp) => {
+                const Icon = SPORT_ICON[sp];
+                return (
+                  <button
+                    key={sp}
+                    type="button"
+                    onClick={() => {
+                      setChooser(false);
+                      startSkill(sp);
+                    }}
+                    className="flex items-center gap-2 rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-left"
+                  >
+                    <Icon size={20} className="text-slate-400" />
+                    <span className="text-sm font-bold text-slate-100">{SPORT_LABEL[sp]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {pickFor && (
