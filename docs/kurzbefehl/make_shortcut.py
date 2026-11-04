@@ -157,15 +157,16 @@ def summed_block(sample_type, prefix, limit=1500, days=2):
     d = detail(f, "Start Date"); setvar(prefix + "D", d, "Startdatum")
     q = detail(f, "Source"); setvar(prefix + "Q", q, "Quelle")
 
-# Typnamen wie in der englischen Health-App. Belegt am iPhone: Weight, Body Fat Percentage, Resting Heart Rate,
-# Heart Rate Variability, Sleep, Steps, Active Calories, Exercise Minutes. Die übrigen sind abgeleitet: Ist einer
-# falsch, zeigt die Suche nach dem Import "Steps" und muss von Hand korrigiert werden.
+# Interne Typnamen, abgelesen aus Marius' Kurzbefehl (iCloud-Export, 4.11.2026). Nicht die Namen der englischen
+# Health-App: "Exercise Time" statt "Exercise Minutes", "Resting Calories", "Oxygen Saturation", "VO2 Max",
+# "Sleep Wrist Temperature", "Heart Rate Recovery, 1 min". Ein falscher Name zeigt sich als "Keine Messungen gefunden"
+# mit englischem Typnamen in der Meldung. Nicht belegt: Swimming Distance, Swimming Strokes, Blood Glucose.
 SUMMED_TYPES = [
     # (Typ, Präfix der Variablen, Schlüssel im Paket)
     ("Steps", "T", "steps"),
     ("Active Calories", "A", "active_kcal"),
-    ("Resting Energy", "RE", "resting_kcal"),
-    ("Exercise Minutes", "E", "exercise_min"),
+    ("Resting Calories", "RE", "resting_kcal"),
+    ("Exercise Time", "E", "exercise_min"),
     ("Walking + Running Distance", "L", "distance_walk_run"),
     ("Cycling Distance", "C", "distance_cycling"),
 ]
@@ -174,11 +175,11 @@ if "--mit-schwimmen" in flags:
     SUMMED_TYPES += [("Swimming Distance", "N", "distance_swim"), ("Swimming Strokes", "Z", "swim_strokes")]
 POINT_TYPES = [
     # (Typ, Variable Wert, Variable Datum, Schlüssel, Anzahl)
-    ("Blood Oxygen", "OW", "OD", "spo2", 40),
-    ("Cardio Recovery", "CRW", "CRD", "hr_recovery", 10),
+    ("Oxygen Saturation", "OW", "OD", "spo2", 40),
+    ("Heart Rate Recovery, 1 min", "CRW", "CRD", "hr_recovery", 10),
     ("Respiratory Rate", "AFW", "AFD", "resp_rate", 40),
-    ("Wrist Temperature", "WTW", "WTD", "wrist_temp", 10),
-    ("Cardio Fitness", "VW", "VD", "vo2max", 5),
+    ("Sleep Wrist Temperature", "WTW", "WTD", "wrist_temp", 10),
+    ("VO2 Max", "VW", "VD", "vo2max", 5),
     ("Walking Heart Rate Average", "GHW", "GHD", "walking_hr", 10),
     ("Body Mass Index", "BMW", "BMD", "bmi", 10),
     ("Lean Body Mass", "MMW", "MMD", "lean_mass", 10),
