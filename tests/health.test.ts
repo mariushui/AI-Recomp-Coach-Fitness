@@ -198,3 +198,21 @@ describe('Zahlen von Kurzbefehle', () => {
     expect(parseNumber('1.234,5')).toBe(1234.5);
   });
 });
+
+describe('Schlaf: angeschnittene älteste Nacht', () => {
+  it('speichert die älteste Nacht eines Pakets nicht, sie kann durch die Probengrenze unvollständig sein', () => {
+    const r = parseHealthPayload({
+      metrics: {
+        sleep: {
+          // Nacht zum 1.11. nur noch mit dem letzten Stück im Paket, Nacht zum 2.11. vollständig
+          values: 'Kern\nKern\nTief',
+          starts: ['2026-11-01T05:30:00+01:00', '2026-11-01T23:00:00+01:00', '2026-11-02T03:00:00+01:00'].join('\n'),
+          ends: ['2026-11-01T06:45:00+01:00', '2026-11-02T03:00:00+01:00', '2026-11-02T06:30:00+01:00'].join('\n'),
+        },
+      },
+    });
+    const ids = r.rows.map((x) => x.external_id);
+    expect(ids).toEqual(['sleep:2026-11-02']);
+    expect(r.rows[0].data.value).toBe(450);
+  });
+});
