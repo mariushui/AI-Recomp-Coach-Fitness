@@ -290,6 +290,11 @@ function parseSleep(block: any, warnings: string[], tz: string): HealthRow[] {
     nights.set(e.day, list);
   });
 
+  // Der Kurzbefehl holt nur die neuesten Proben (Grenze je Abfrage). Die älteste Nacht im Paket ist deshalb oft angeschnitten
+  // und würde eine vorher vollständig gespeicherte Nacht mit zu wenig Schlaf überschreiben. Sie kam beim letzten Abgleich
+  // vollständig an, also hier weglassen, sobald das Paket mehr als eine Nacht enthält.
+  if (nights.size > 1) nights.delete([...nights.keys()].sort()[0]);
+
   const rows: HealthRow[] = [];
   for (const [day, list] of nights) {
     const asleepStages: Stage[] = ['core', 'deep', 'rem', 'asleep'];
