@@ -2,12 +2,17 @@
 
 import type { Entry, BodyData, HealthData, MealData, WorkoutData, Sport } from '../supabase/functions/_shared/domain';
 import { addDays, dayKey, startOfDay, weekKey } from './time';
+import { skinfoldSum } from './bodyfat';
 
 export interface DayStats {
   day: string;
   weight?: number;
   bodyFat?: number;
   waist?: number;
+  chest?: number;
+  hip?: number;
+  arm?: number;
+  skinfoldSum?: number; // Summe der 7 Hautfalten in mm
   protein?: number;
   kcal?: number;
   carbs?: number;
@@ -40,6 +45,7 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
   }
   const healthWeight = new Map<string, number>();
   const healthFat = new Map<string, number>();
+  const healthLean = new Map<string, number>();
   const sorted = [...entries].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 
   for (const e of sorted) {
@@ -53,6 +59,10 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         if (b.weight_kg !== undefined && s.weight === undefined) s.weight = b.weight_kg;
         if (b.body_fat_pct !== undefined && s.bodyFat === undefined) s.bodyFat = b.body_fat_pct;
         if (b.waist_cm !== undefined) s.waist = b.waist_cm;
+        if (b.chest_cm !== undefined) s.chest = b.chest_cm;
+        if (b.hip_cm !== undefined) s.hip = b.hip_cm;
+        if (b.arm_cm !== undefined) s.arm = b.arm_cm;
+        { const sf = skinfoldSum(b.skinfolds); if (sf !== undefined) s.skinfoldSum = sf; }
         if (b.muscle_kg !== undefined) s.muscle = b.muscle_kg;
         break;
       }
@@ -73,6 +83,7 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         const h = e.data as HealthData;
         if (h.metric === 'weight') healthWeight.set(k, h.value);
         if (h.metric === 'body_fat') healthFat.set(k, h.value);
+        if (h.metric === 'lean_mass') healthLean.set(k, h.value);
         if (h.metric === 'sleep') s.sleepH = Math.round((h.value / 60) * 10) / 10;
         if (h.metric === 'hrv') s.hrv = h.value;
         if (h.metric === 'resting_hr') s.restingHr = h.value;
@@ -93,6 +104,8 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
       s.leanMass = Math.round(s.weight * (1 - s.bodyFat / 100) * 10) / 10;
       s.fatMass = Math.round(s.weight * (s.bodyFat / 100) * 10) / 10;
     }
+    // Magere Masse direkt von der Waage hat Vorrang vor der Rechnung, wenn kein manueller KFA eingetragen ist
+    if (healthLean.has(s.day) && s.leanMass === undefined) s.leanMass = healthLean.get(s.day);
     for (const k of ['protein', 'kcal', 'carbs', 'fat'] as const) if (s[k] !== undefined) s[k] = Math.round(s[k]!);
   }
   return [...days.values()];

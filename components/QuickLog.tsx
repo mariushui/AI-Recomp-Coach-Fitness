@@ -10,6 +10,7 @@ import { EntryIcon, Icons } from './icons';
 import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
 import SwipeToDelete from './SwipeToDelete';
+import MeasureReminder from './MeasureReminder';
 import { Button, Card, ErrorBox } from './ui';
 import TodayBar from './TodayBar';
 
@@ -20,6 +21,7 @@ const QUICK_ADD: { kind: EntryKind; label: string; data: any }[] = [
   { kind: 'meal', label: 'Ernährung', data: {} },
   { kind: 'workout', label: 'Training', data: { sport: 'tennis' } },
   { kind: 'wellbeing', label: 'Befinden', data: {} },
+  { kind: 'body', label: 'Körpermaße', data: {} },
 ];
 
 const EXAMPLES = [
@@ -184,6 +186,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
 
   return (
     <div className="space-y-4">
+      <MeasureReminder refreshKey={refreshKey} onMeasure={() => setDrafts((prev) => [...prev, { kind: 'body', occurred_at: localIso(), data: {}, manual: true }])} />
       <TodayBar refreshKey={refreshKey} />
       <Card>
         <div className="relative">
@@ -290,7 +293,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
 
       <div>
         <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Oder direkt eintragen</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {QUICK_ADD.map((q) => (
             <button
               key={q.label}

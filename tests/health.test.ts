@@ -160,3 +160,41 @@ describe('Cardio-Erholung', () => {
     expect(r.rows[0].data).toEqual({ metric: 'hr_recovery', value: 27, unit: 'bpm' });
   });
 });
+
+describe('weitere Kennzahlen aus dem Kurzbefehl', () => {
+  it('Strecken, Schwimmzüge, Blutzucker in mmol, Atemfrequenz, magere Masse', () => {
+    const r = parseHealthPayload({
+      metrics: {
+        distance_walk_run: { values: '1,2\n0,8\n2,5', dates: '03.11.2026, 08:00\n03.11.2026, 09:00\n03.11.2026, 09:00', sources: 'iPhone\niPhone\nApple Watch' },
+        distance_cycling: { values: '4,35', dates: '03.11.2026, 08:00', sources: 'Apple Watch' },
+        swim_strokes: { values: '120\n80', dates: '03.11.2026, 07:00\n03.11.2026, 07:10', sources: 'Apple Watch\nApple Watch' },
+        glucose: { values: '5,5\n6,5', dates: '03.11.2026, 08:00\n03.11.2026, 12:00' },
+        resp_rate: { values: '14\n16', dates: '03.11.2026, 03:00\n03.11.2026, 04:00' },
+        lean_mass: { values: '66,2', dates: '03.11.2026, 07:00' },
+      },
+    });
+    const v = (m: string) => r.rows.find((x) => x.metric === m)?.data.value;
+    expect(v('distance_walk_run')).toBe(2.5);
+    expect(v('distance_cycling')).toBe(4.35);
+    expect(v('swim_strokes')).toBe(200);
+    expect(v('glucose')).toBe(108);
+    expect(v('resp_rate')).toBe(15);
+    expect(v('lean_mass')).toBe(66.2);
+    expect(r.warnings).toEqual([]);
+  });
+});
+
+describe('Zahlen von Kurzbefehle', () => {
+  it('Gewicht mit drei Nachkommastellen wird gespeichert', () => {
+    const r = parseHealthPayload({ metrics: { weight: { values: '86.154', dates: '04.11.2026, 07:10' } } });
+    expect(r.rows[0].data.value).toBe(86.2);
+    expect(r.warnings).toEqual([]);
+  });
+  it('Punkt mit drei Nachkommastellen ist ein Dezimaltrenner', () => {
+    expect(parseNumber('86.154', true)).toBe(86.154);
+    expect(parseNumber('64.624', true)).toBe(64.624);
+    expect(parseNumber('1.234.567', true)).toBe(1234567);
+    expect(parseNumber('12.345')).toBe(12345); // Schritte
+    expect(parseNumber('1.234,5')).toBe(1234.5);
+  });
+});

@@ -2,6 +2,7 @@
 
 export const CHARTS = [
   { key: 'body', label: 'Gewicht und Körper' },
+  { key: 'measures', label: 'Umfänge und Hautfalten' },
   { key: 'nutrition', label: 'Ernährung' },
   { key: 'meals', label: 'Ernährung nach Mahlzeit' },
   { key: 'training', label: 'Training und Plan' },

@@ -219,7 +219,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     });
     const bs = buckets(from, to, g, range);
     const rows = aggregate(days as any, bs, [
-      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any, 'strainLo' as any, 'strainHi' as any, 'balance' as any,
+      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'waist', 'chest', 'hip', 'arm', 'skinfoldSum', 'recovery' as any, 'strain' as any, 'strainLo' as any, 'strainHi' as any, 'balance' as any,
       'protein', 'carbs', 'fat', 'kcal',
       'steps', 'activeKcal', 'exerciseMin',
       'restingHr', 'hrv', 'hrRecovery', 'sleepH', 'vo2max', 'spo2',
@@ -386,6 +386,37 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
                 connectNulls
               />
             ))}
+          </ComposedChart>
+        </Chart>
+      )}
+
+      {show('measures') && ['waist', 'chest', 'hip', 'arm', 'skinfoldSum'].some((k) => has(rows, k)) && (
+        <Chart
+          title="Umfänge und Hautfalten"
+          summary={(() => {
+            const first = (k: string) => (days as any[]).find((d) => typeof d[k] === 'number')?.[k];
+            const last = (k: string) => [...(days as any[])].reverse().find((d) => typeof d[k] === 'number')?.[k];
+            const diff = (k: string, label: string, unit: string) => {
+              const a = first(k), b = last(k);
+              if (a === undefined || b === undefined) return null;
+              const d = Math.round((b - a) * 10) / 10;
+              return `${label} ${b.toLocaleString('de-DE')} ${unit} (${d > 0 ? '+' : ''}${d.toLocaleString('de-DE')})`;
+            };
+            return [diff('waist', 'Taille', 'cm'), diff('arm', 'Arm', 'cm'), diff('skinfoldSum', 'Hautfalten', 'mm')].filter(Boolean).join(' · ') || undefined;
+          })()}
+          hint="Für die Recomposition zählt die Richtung: Taille und Hautfalten runter, Oberarm und Brust gleich oder rauf. Messung alle 14 Tage, morgens nüchtern, immer an denselben Stellen. Linke Achse cm, rechte Achse mm (Summe der 7 Hautfalten)."
+        >
+          <ComposedChart data={rows}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            {xAxis}
+            <YAxis yAxisId="cm" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={36} allowDecimals={false} />
+            <YAxis yAxisId="mm" orientation="right" {...axis} domain={['dataMin - 5', 'dataMax + 5']} width={34} allowDecimals={false} />
+            <Tooltip {...tooltipStyle} />
+            <Line yAxisId="cm" dataKey="waist" name="Taille cm" stroke="#FF6B00" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+            <Line yAxisId="cm" dataKey="chest" name="Brust cm" stroke="#38BDF8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+            <Line yAxisId="cm" dataKey="hip" name="Hüfte cm" stroke="#A78BFA" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+            <Line yAxisId="cm" dataKey="arm" name="Oberarm cm" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+            <Line yAxisId="mm" dataKey="skinfoldSum" name="Hautfalten mm" stroke="#F472B6" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
           </ComposedChart>
         </Chart>
       )}

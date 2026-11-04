@@ -81,10 +81,17 @@ Deno.serve(async (req) => {
   const parts: string[] = [];
   if (rows.length) parts.push(`${rows.length} Werte`);
   if (savedWorkouts) parts.push(`${savedWorkouts} Training(s)`);
+  // Je Bereich, was ankam, damit ein ausgefallener Block in der Mitteilung sofort auffällt
+  const LABEL: Record<string, string> = { weight: 'Gewicht', body_fat: 'KFA', resting_hr: 'Ruhepuls', hrv: 'HRV', sleep: 'Schlaf', steps: 'Schritte', active_kcal: 'kcal', exercise_min: 'Trainingsmin.', vo2max: 'VO2max', spo2: 'SpO2', hr_recovery: 'HRR', distance_walk_run: 'Gehen km', distance_cycling: 'Rad km', distance_swim: 'Schwimmen m', swim_strokes: 'Züge', glucose: 'Blutzucker', bmi: 'BMI', resp_rate: 'Atemfrequenz', wrist_temp: 'Temperatur', lean_mass: 'Magere Masse', resting_kcal: 'Ruhe-kcal', walking_hr: 'Puls Gehen' };
+  const sent = Object.keys((body as any)?.metrics ?? {});
+  const counts = sent.map((m) => `${LABEL[m] ?? m} ${rows.filter((r) => r.metric === m).length}`);
+  if ((body as any)?.workouts || (body as any)?.workouts2) counts.push(`Trainings ${savedWorkouts}`);
+  const detail = counts.length ? ` ${counts.join(', ')}.` : '';
+  const hint = warnings.length ? ` ${warnings.length} Hinweis(e): ${warnings[0]}` : '';
   const summary =
     parts.length === 0
-      ? 'Keine Health-Werte erkannt.'
-      : `${parts.join(' und ')} für ${days.length} Tag(e) gespeichert (${days[0]} bis ${days[days.length - 1]}).`;
+      ? `Keine Health-Werte erkannt.${detail}${hint}`
+      : `${parts.join(' und ')} für ${days.length} Tag(e) gespeichert.${detail}${hint}`;
   return json({ ok: true, saved: rows.length, savedWorkouts, days, warnings, summary });
 });
 

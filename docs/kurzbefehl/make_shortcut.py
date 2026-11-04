@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Erzeugt die Kurzbefehl-Datei "Recomp Health" als unsignierte .shortcut-Datei.
 
-Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--ohne-trainings] [--nur-stufe-1]
+Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--mit-schwimmen] [--mit-blutzucker] [--nur-stufe-1]
 Danach auf dem Mac signieren:  mkdir -p signed && shortcuts sign --mode anyone --input "Recomp Health.shortcut" --output "signed/Recomp Health.shortcut"
 und per AirDrop aufs iPhone schicken.
 
@@ -137,7 +137,9 @@ flags = {a for a in sys.argv[1:] if a.startswith("--")}
 token = args[0] if len(args) > 0 else "rc_HIER_DEIN_TOKEN"
 url = args[1] if len(args) > 1 else "https://DEIN-PROJEKT.supabase.co/functions/v1/health-ingest"
 stufe2 = "--nur-stufe-1" not in flags
-mit_trainings = stufe2 and "--ohne-trainings" not in flags
+# Trainings erst einschalten, wenn die Kennung der Aktion "Trainings suchen" aus einem iOS-Export belegt ist.
+# Eine unbekannte Aktion bricht den ganzen Kurzbefehl ab (geprüft am iPhone, 4.11.2026).
+mit_trainings = stufe2 and "--mit-trainings" in flags
 
 metric_items = [
     sub("weight", [("values", "GW"), ("dates", "GD")]),
@@ -155,15 +157,43 @@ def summed_block(sample_type, prefix, limit=1500, days=2):
     d = detail(f, "Start Date"); setvar(prefix + "D", d, "Startdatum")
     q = detail(f, "Source"); setvar(prefix + "Q", q, "Quelle")
 
+# Interne Typnamen, abgelesen aus Marius' Kurzbefehl (iCloud-Export, 4.11.2026). Nicht die Namen der englischen
+# Health-App: "Exercise Time" statt "Exercise Minutes", "Resting Calories", "Oxygen Saturation", "VO2 Max",
+# "Sleep Wrist Temperature", "Heart Rate Recovery, 1 min". Ein falscher Name zeigt sich als "Keine Messungen gefunden"
+# mit englischem Typnamen in der Meldung. Nicht belegt: Swimming Distance, Swimming Strokes, Blood Glucose.
+SUMMED_TYPES = [
+    # (Typ, Präfix der Variablen, Schlüssel im Paket)
+    ("Steps", "T", "steps"),
+    ("Active Calories", "A", "active_kcal"),
+    ("Resting Calories", "RE", "resting_kcal"),
+    ("Exercise Time", "E", "exercise_min"),
+    ("Walking + Running Distance", "L", "distance_walk_run"),
+    ("Cycling Distance", "C", "distance_cycling"),
+]
+# Ohne Daten zeigt Kurzbefehle bei jedem Lauf "Keine Messungen gefunden" und wartet auf OK. Deshalb nur auf Wunsch.
+if "--mit-schwimmen" in flags:
+    SUMMED_TYPES += [("Swimming Distance", "N", "distance_swim"), ("Swimming Strokes", "Z", "swim_strokes")]
+POINT_TYPES = [
+    # (Typ, Variable Wert, Variable Datum, Schlüssel, Anzahl)
+    ("Oxygen Saturation", "OW", "OD", "spo2", 40),
+    ("Heart Rate Recovery, 1 min", "CRW", "CRD", "hr_recovery", 10),
+    ("Respiratory Rate", "AFW", "AFD", "resp_rate", 40),
+    ("Sleep Wrist Temperature", "WTW", "WTD", "wrist_temp", 10),
+    ("VO2 Max", "VW", "VD", "vo2max", 5),
+    ("Walking Heart Rate Average", "GHW", "GHD", "walking_hr", 10),
+    ("Body Mass Index", "BMW", "BMD", "bmi", 10),
+    ("Lean Body Mass", "MMW", "MMD", "lean_mass", 10),
+]
+if "--mit-blutzucker" in flags:  # erst mit Sensor sinnvoll
+    POINT_TYPES.append(("Blood Glucose", "BZW", "BZD", "glucose", 300))
+
 if stufe2:
-    summed_block("Steps", "T")
-    summed_block("Active Calories", "A")
-    summed_block("Exercise Minutes", "E")
-    metric_items += [
-        sub("steps", [("values", "TW"), ("dates", "TD"), ("sources", "TQ")]),
-        sub("active_kcal", [("values", "AW"), ("dates", "AD"), ("sources", "AQ")]),
-        sub("exercise_min", [("values", "EW"), ("dates", "ED"), ("sources", "EQ")]),
-    ]
+    for typ, prefix, key in SUMMED_TYPES:
+        summed_block(typ, prefix)
+        metric_items.append(sub(key, [("values", prefix + "W"), ("dates", prefix + "D"), ("sources", prefix + "Q")]))
+    for typ, vw, vd, key, limit in POINT_TYPES:
+        point_block(typ, vw, vd, limit=limit)
+        metric_items.append(sub(key, [("values", vw), ("dates", vd)]))
 
 metrics = dict_of(metric_items)
 metrics["WFKey"] = plain("metrics")
