@@ -17,7 +17,32 @@ export interface MealData {
   carbs_g?: number;
   fat_g?: number;
   confidence?: 'low' | 'medium' | 'high';
+  micros?: Micros; // KI-Schätzung je Mahlzeit, Einheit steht im Schlüssel
 }
+
+/**
+ * Mikronährstoffe, die die KI je Mahlzeit schätzt. ref = Tageswert für einen Mann um 45 Jahre
+ * (DGE-Referenzwerte, Zucker und gesättigte Fette nach WHO, Natrium als 6 g Salz). dir: 'min' = mindestens erreichen,
+ * 'max' = nicht überschreiten. cap = Obergrenze je Mahlzeit, darüber gilt der Wert als Fehler.
+ */
+export const MICROS = [
+  { key: 'fiber_g', label: 'Ballaststoffe', unit: 'g', ref: 30, dir: 'min', cap: 80 },
+  { key: 'sugar_g', label: 'Zucker', unit: 'g', ref: 50, dir: 'max', cap: 300 },
+  { key: 'sat_fat_g', label: 'Gesättigte Fette', unit: 'g', ref: 25, dir: 'max', cap: 150 },
+  { key: 'sodium_mg', label: 'Natrium', unit: 'mg', ref: 2400, dir: 'max', cap: 10000 },
+  { key: 'potassium_mg', label: 'Kalium', unit: 'mg', ref: 4000, dir: 'min', cap: 10000 },
+  { key: 'magnesium_mg', label: 'Magnesium', unit: 'mg', ref: 350, dir: 'min', cap: 2000 },
+  { key: 'calcium_mg', label: 'Calcium', unit: 'mg', ref: 1000, dir: 'min', cap: 4000 },
+  { key: 'iron_mg', label: 'Eisen', unit: 'mg', ref: 11, dir: 'min', cap: 100 },
+  { key: 'zinc_mg', label: 'Zink', unit: 'mg', ref: 14, dir: 'min', cap: 100 },
+  { key: 'vitamin_d_ug', label: 'Vitamin D', unit: 'µg', ref: 20, dir: 'min', cap: 250 },
+  { key: 'vitamin_b12_ug', label: 'Vitamin B12', unit: 'µg', ref: 4, dir: 'min', cap: 1000 },
+  { key: 'vitamin_c_mg', label: 'Vitamin C', unit: 'mg', ref: 110, dir: 'min', cap: 3000 },
+  { key: 'folate_ug', label: 'Folat', unit: 'µg', ref: 300, dir: 'min', cap: 3000 },
+  { key: 'omega3_g', label: 'Omega-3 (EPA, DHA)', unit: 'g', ref: 0.25, dir: 'min', cap: 10 },
+] as const;
+export type MicroKey = (typeof MICROS)[number]['key'];
+export type Micros = Partial<Record<MicroKey, number>>;
 
 export const SPORTS = ['tennis', 'laufen', 'capoeira', 'kraft', 'rad', 'schwimmen', 'mobility', 'sonstiges'] as const;
 export type Sport = (typeof SPORTS)[number];
@@ -82,7 +107,13 @@ export interface WorkoutData {
   exercises?: StrengthSet[];
   session_kind?: SessionKind; // nur Kraft
   template?: string; // Name der Vorlage, aus der die Einheit stammt
+  focus_notes?: FocusNote[]; // Technik-Sport: bis zu 3 Fokus-Punkte mit Notiz zum Fortschritt
   notes?: string;
+}
+
+export interface FocusNote {
+  focus: string;
+  note?: string;
 }
 
 /** Vorgenommene Einheit. occurred_at = geplanter Zeitpunkt. */
@@ -263,6 +294,17 @@ const num = (v: unknown): number | undefined => {
   return undefined;
 };
 
+function normalizeMicros(raw: any): Micros | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Micros = {};
+  for (const m of MICROS) {
+    const v = num(raw[m.key]);
+    if (v === undefined || v < 0 || v > m.cap) continue;
+    out[m.key] = Math.round(v * 100) / 100;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
 
@@ -298,6 +340,7 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         carbs_g: num(raw.carbs_g),
         fat_g: num(raw.fat_g),
         confidence: (['low', 'medium', 'high'] as const).includes(raw.confidence) ? raw.confidence : undefined,
+        micros: normalizeMicros(raw.micros),
       });
       return (d.description || d.items?.length ? d : null) as any;
     }
@@ -352,6 +395,12 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         kcal: num(raw.kcal),
         session_kind: (SESSION_KINDS as readonly string[]).includes(raw.session_kind) ? (raw.session_kind as SessionKind) : undefined,
         template: str(raw.template),
+        focus_notes: Array.isArray(raw.focus_notes)
+          ? raw.focus_notes
+              .filter((f: any) => str(f?.focus))
+              .slice(0, 3)
+              .map((f: any) => clean<FocusNote>({ focus: str(f.focus)!, note: str(f.note) }))
+          : undefined,
       }) as any;
     }
     case 'body': {

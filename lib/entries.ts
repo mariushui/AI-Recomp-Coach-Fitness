@@ -35,6 +35,14 @@ export async function listStrengthHistory(days = 400): Promise<Entry[]> {
   return [...(w.data ?? []), ...(b.data ?? []), ...(h.data ?? [])] as Entry[];
 }
 
+/** Technik-Trainings (Tennis, Capoeira) für die Fokus-Notizen. */
+export async function listSkillHistory(days = 180): Promise<Entry[]> {
+  const from = addDays(new Date(), -days).toISOString();
+  const { data, error } = await supabase.from('entries').select('*').eq('kind', 'workout').in('data->>sport', ['tennis', 'capoeira']).gte('occurred_at', from).order('occurred_at');
+  if (error) throw error;
+  return (data ?? []) as Entry[];
+}
+
 export async function listAllEntries(): Promise<Entry[]> {
   return listEntries(new Date('2000-01-01'), new Date('2100-01-01'));
 }
@@ -44,7 +52,7 @@ export async function insertEntries(entries: NewEntry[]): Promise<void> {
   const rest: NewEntry[] = [];
   for (const e of entries) {
     // Kraft aus der Eingabe hat eine eigene external_id (gegen doppeltes Speichern), darf aber trotzdem mit Apple zusammengehen
-    const mergeable = !e.external_id || e.external_id.startsWith('kraft:');
+    const mergeable = !e.external_id || e.external_id.startsWith('kraft:') || e.external_id.startsWith('training:');
     if (e.kind === 'workout' && mergeable && (await mergeIntoAppleWorkout(e as NewEntry<'workout'>))) continue;
     rest.push(e);
   }

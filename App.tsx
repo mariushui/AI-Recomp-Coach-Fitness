@@ -12,18 +12,21 @@ import { cacheHistory } from './lib/strengthTemplates';
 import { flush, queuedCount } from './lib/offlineQueue';
 
 const loadTrends = () => import('./components/Trends');
-const loadStrength = () => import('./components/StrengthView');
+const loadStrength = () => import('./components/TrainingView');
 const Trends = lazy(loadTrends);
-const StrengthView = lazy(loadStrength);
+const TrainingView = lazy(loadStrength);
+const loadNutrition = () => import('./components/NutritionView');
+const NutritionView = lazy(loadNutrition);
 
-type Tab = 'log' | 'strength' | 'calendar' | 'trends' | 'settings';
+type Tab = 'log' | 'nutrition' | 'training' | 'calendar' | 'trends' | 'settings';
 
+// Einstellungen sitzen als Zahnrad oben rechts, sonst passen die Tabs nicht auf die iPhone-Breite
 const TABS: { id: Tab; label: string; icon: (typeof Icons)['Plus'] }[] = [
   { id: 'log', label: 'Erfassen', icon: Icons.Plus },
-  { id: 'strength', label: 'Kraft', icon: Icons.Barbell },
+  { id: 'nutrition', label: 'Ernährung', icon: Icons.Fork },
+  { id: 'training', label: 'Training', icon: Icons.Barbell },
   { id: 'calendar', label: 'Kalender', icon: Icons.Calendar },
   { id: 'trends', label: 'Verlauf', icon: Icons.Chart },
-  { id: 'settings', label: 'Einstellungen', icon: Icons.Gear },
 ];
 
 /** Zuletzt gespeicherte Sitzung aus dem Browser, für den Start ohne Netz. */
@@ -63,6 +66,7 @@ function App() {
     // Seiten mit Diagrammen vorab laden, damit sie der Service Worker auch für den Keller im Speicher hat
     const t = setTimeout(() => {
       loadStrength().catch(() => undefined);
+      loadNutrition().catch(() => undefined);
       loadTrends().catch(() => undefined);
     }, 3000);
     return () => {
@@ -112,17 +116,33 @@ function App() {
   return (
     <div className="min-h-screen pb-24">
       <header className="sticky top-0 z-10 bg-cyber-black/90 backdrop-blur px-4 pt-[max(env(safe-area-inset-top),12px)] pb-3 border-b border-white/5">
-        <h1 className="font-display text-lg font-bold">
-          Recomp <span className="text-cyber-green">Coach</span>
-        </h1>
+        <div className="max-w-xl mx-auto flex items-center justify-between">
+          <h1 className="font-display text-lg font-bold">
+            Recomp <span className="text-cyber-green">Coach</span>
+          </h1>
+          <button
+            type="button"
+            onClick={() => setTab('settings')}
+            aria-label="Einstellungen"
+            aria-pressed={tab === 'settings'}
+            className={`p-1.5 -mr-1.5 ${tab === 'settings' ? 'text-cyber-green' : 'text-slate-400'}`}
+          >
+            <Icons.Gear size={22} />
+          </button>
+        </div>
         {waiting > 0 && <p className="text-[11px] text-amber-300 mt-0.5">{waiting} {waiting === 1 ? 'Eintrag wartet' : 'Einträge warten'} auf Netz</p>}
       </header>
 
       <main className="max-w-xl mx-auto px-4 pt-4">
         {tab === 'log' && <QuickLog onSaved={bump} refreshKey={refreshKey} />}
-        {tab === 'strength' && (
+        {tab === 'nutrition' && (
           <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
-            <StrengthView refreshKey={refreshKey} onSaved={bump} />
+            <NutritionView refreshKey={refreshKey} onChanged={bump} />
+          </Suspense>
+        )}
+        {tab === 'training' && (
+          <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
+            <TrainingView refreshKey={refreshKey} onSaved={bump} />
           </Suspense>
         )}
         {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChanged={bump} />}

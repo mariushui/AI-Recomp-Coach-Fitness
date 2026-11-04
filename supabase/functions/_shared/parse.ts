@@ -1,7 +1,7 @@
 // Prompt, Antwort-Schema und Nachbearbeitung für das Zerlegen von Freitext in Einträge.
 // Wird von der Edge Function parse-log genutzt. Reines TypeScript, getestet in tests/parse.test.ts.
 
-import { ENTRY_KINDS, SPORTS, normalizeData, type EntryKind, type EntryDataByKind } from './domain.ts';
+import { ENTRY_KINDS, MICROS, SPORTS, normalizeData, type EntryKind, type EntryDataByKind } from './domain.ts';
 
 export interface ParsedEntry<K extends EntryKind = EntryKind> {
   kind: K;
@@ -51,6 +51,7 @@ export const RESPONSE_SCHEMA = {
               carbs_g: N(),
               fat_g: N(),
               confidence: E(['low', 'medium', 'high']),
+              micros: { type: 'OBJECT', properties: Object.fromEntries(MICROS.map((m) => [m.key, N()])) },
             },
           },
           workout: {
@@ -141,6 +142,7 @@ Regeln:
 - Ergänzungsmittel (Kreatin, Whey ohne Mahlzeit, Vitamin D, Omega-3, Magnesium, Elektrolyte): meal mit meal_type "ergaenzung", items mit Name und Menge (z. B. "Kreatin", "5 g"), description = Aufzählung. Makros nur, wenn nennenswert (Whey: Protein und kcal).
 - Jedes genannte Lebensmittel und Getränk mit Kalorien landet in einem meal. Nichts davon weglassen. Mehrere Dinge zu verschiedenen Zeiten = mehrere meals.
 - Mahlzeiten: Zutaten mit Menge auflisten. Protein, kcal, Kohlenhydrate und Fett realistisch schätzen. Protein ist am wichtigsten. confidence = low, wenn Mengen fehlen.
+- micros: Mikronährstoffe der ganzen Mahlzeit nach üblichen Nährwerttabellen schätzen (BLS, USDA), Einheit steht im Schlüssel (_g, _mg, _ug = Mikrogramm). Nur Nährstoffe, die in den Zutaten nennenswert vorkommen. Unbekanntes weglassen, nie 0 raten. Ergänzungsmittel: Dosis laut Angabe (Vitamin D 1000 IE = 25 ug, 1 Omega-3-Kapsel nur mit genannter Menge EPA und DHA).
 - Training: sport aus der Liste wählen, sonst "sonstiges" mit sport_label. Bei Tennis und Capoeira focus, high und low erfassen, wenn genannt. Bei Kraft jede Übung mit Sätzen, Wiederholungen, Gewicht in kg. Bei Laufen Distanz und Pace.
 - plan gibt es nur für Trainingseinheiten. Essen ist immer meal, auch bei "gleich", "als Nächstes" oder "später" (dann occurred_at entsprechend später).
 - Vorhaben sind plan, nicht workout: alles in der Zukunft oder mit "will", "plane", "vorgenommen", "morgen", "nächste Woche", "am Donnerstag".
@@ -162,7 +164,7 @@ export function buildFormatHint(): string {
   return `Antworte nur mit JSON, ohne Erklärung, in genau dieser Form:
 {"entries":[{"kind":"meal|workout|plan|body|wellbeing|lab|note","occurred_at":"ISO 8601 mit Offset","meal":{...}|"workout":{...}|...}],"questions":["..."]}
 Je Eintrag nur das Unterobjekt zu seiner Art. Felder:
-meal: description, meal_type (fruehstueck|mittag|abend|snack|shake|ergaenzung), items[{name,amount}], protein_g, kcal, carbs_g, fat_g, confidence (low|medium|high)
+meal: description, meal_type (fruehstueck|mittag|abend|snack|shake|ergaenzung), items[{name,amount}], protein_g, kcal, carbs_g, fat_g, confidence (low|medium|high), micros{${MICROS.map((m) => m.key).join(',')}}
 workout: sport (${SPORTS.join('|')}), sport_label (nur bei sonstiges), session_type (training|match|stunde|frei|wettkampf), duration_min, rpe, focus, high, low, result, opponent, distance_km, avg_pace, avg_hr, exercises[{exercise,sets,reps,weight_kg,rpe}], notes
 plan: sport, sport_label (nur bei sonstiges), session_type, duration_min, rpe, focus, goal, distance_km, exercises[{exercise,sets,reps,weight_kg}], notes
 body: weight_kg, body_fat_pct, waist_cm, muscle_kg, bp_systolic, bp_diastolic

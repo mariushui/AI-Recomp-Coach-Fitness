@@ -9,10 +9,11 @@ import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { MACRO_COLOR, goalRatio, goalState, todaySummary, type TodaySummary } from '../lib/today';
 import { BASELINE_DAYS, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainLabel, strainTarget, strainVsTarget } from '../lib/recovery';
 import { dailyStats } from '../lib/stats';
+import { estimateActiveToday } from '../lib/energy';
 import { addDays, dayKey, startOfDay } from '../lib/time';
 
 /** Eine Zeile Ernährung: Wert, Ziel, Balken mit gleitender Farbe. */
-const MacroRow: React.FC<{ label: string; value?: number; goal?: number; unit: string; mode: 'more' | 'less'; color: string }> = ({ label, value, goal, unit, mode, color }) => {
+export const MacroRow: React.FC<{ label: string; value?: number; goal?: number; unit: string; mode: 'more' | 'less'; color: string }> = ({ label, value, goal, unit, mode, color }) => {
   const ratio = goalRatio(value, goal);
   const state = goalState(value, goal, mode);
   const valueColor = state === 'over' ? '#FF375F' : state === 'reached' ? '#ADFF2F' : undefined;
@@ -74,6 +75,7 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [strain, setStrain] = useState<number | undefined>();
   const [burned, setBurned] = useState<number | undefined>();
   const [kcalDynamic, setKcalDynamic] = useState(false);
+  const [estimated, setEstimated] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +89,10 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         const days = dailyStats(entries, from, to);
         const lean = days.map((d) => d.leanMass).filter((x): x is number => typeof x === 'number');
         const today = days[days.length - 1];
-        const kcal = dailyKcalTarget(lean[lean.length - 1], today?.activeKcal, average(days.slice(-15, -1), 'activeKcal'), profile.kcal_goal);
+        // Apple liefert den Tag erst beim nächsten Abgleich. Bis dahin: Alltag + Training heute (erledigt oder geplant).
+        const active = estimateActiveToday(days, entries, now);
+        setEstimated(active.estimated);
+        const kcal = dailyKcalTarget(lean[lean.length - 1], active.value ?? today?.activeKcal, average(days.slice(-15, -1), 'activeKcal'), profile.kcal_goal);
         setKcalDynamic(kcal.dynamic);
         setBurned(kcal.dynamic ? kcal.goal : undefined);
         setS(todaySummary(entries, { protein: profile.protein_goal_g, kcal: kcal.goal, carbs: profile.carbs_goal_g, fat: profile.fat_goal_g }, now));
@@ -116,7 +121,11 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         <MacroRow label="Kohlenhydr." value={s.carbs} goal={s.carbsGoal} unit="g" mode="less" color={MACRO_COLOR.carbs} />
         <MacroRow label="Fett" value={s.fat} goal={s.fatGoal} unit="g" mode="less" color={MACRO_COLOR.fat} />
         <MacroRow label="Kalorien" value={s.kcal} goal={s.kcalGoal} unit="kcal" mode="less" color={MACRO_COLOR.kcal} />
-        {kcalDynamic && <p className="text-[10px] text-slate-500 pt-0.5">Kalorienziel = Grundumsatz + aktive Kalorien heute aus Apple Health</p>}
+        {kcalDynamic && (
+          <p className="text-[10px] text-slate-500 pt-0.5">
+            {estimated ? 'Kalorienziel = Grundumsatz + geschätzt aktiv (Alltag + Training laut Plan)' : 'Kalorienziel = Grundumsatz + aktive Kalorien heute aus Apple Health'}
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Tile label="Erholung" value={recovery !== undefined ? String(recovery) : undefined} unit="%" sub={rec.text} color={rec.color} ratio={recovery !== undefined ? recovery / 100 : null} />
@@ -130,7 +139,7 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
           ratio={strain !== undefined ? strain / 10 : null}
           target={target ? { lo: target.lo / 10, hi: target.hi / 10 } : null}
         />
-        <Tile label="Verbrauch" value={burned !== undefined ? fmtKcal(burned) : undefined} unit="kcal" sub={burned !== undefined ? 'Grundumsatz + aktiv heute' : 'braucht Apple Health'} color="#FB923C" ratio={burned !== undefined && s.kcal !== undefined ? s.kcal / burned : null} />
+        <Tile label="Verbrauch" value={burned !== undefined ? fmtKcal(burned) : undefined} unit="kcal" sub={burned === undefined ? 'braucht Apple Health' : estimated ? 'geschätzt mit Plan' : 'Grundumsatz + aktiv heute'} color="#FB923C" ratio={burned !== undefined && s.kcal !== undefined ? s.kcal / burned : null} />
       </div>
     </div>
   );

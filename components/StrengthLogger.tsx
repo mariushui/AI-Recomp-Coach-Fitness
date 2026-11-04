@@ -6,8 +6,7 @@ import { SESSION_KINDS, SESSION_KIND_LABEL, type Entry, type NewEntry, type Sess
 import { MUSCLES, MUSCLE_LABEL, addCustomExercise, allExercises, exerciseById, searchExercises, type Exercise, type LoadMode, type Muscle } from '../lib/exercises';
 import { exerciseKey, lastSets, resolveSet, summarizeSets } from '../lib/strength';
 import { appendToCache, clearDraft, loadDraft, loadTemplates, saveDraft, upsertTemplate, type StrengthTemplate } from '../lib/strengthTemplates';
-import { insertEntries } from '../lib/entries';
-import { enqueue, isNetworkError } from '../lib/offlineQueue';
+import { saveWorkoutEntry } from '../lib/saveWorkout';
 import { localIso } from '../lib/time';
 import { Button, ErrorBox } from './ui';
 import { Icons } from './icons';
@@ -138,16 +137,10 @@ const StrengthLogger: React.FC<{
     setSaving(true);
     let queued = false;
     try {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('offline');
-      // Kellernetz mit einem Balken: nach 8 Sekunden lokal speichern statt warten
-      await Promise.race([insertEntries([entry]), new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))]);
+      queued = (await saveWorkoutEntry(entry)).queued;
     } catch (e) {
-      if (!isNetworkError(e) && (e as Error).message !== 'offline') {
-        setSaving(false);
-        return setError((e as Error).message);
-      }
-      enqueue([entry]);
-      queued = true;
+      setSaving(false);
+      return setError((e as Error).message);
     }
     appendToCache({ id: 'lokal-' + draft.startedAt, user_id: '', kind: 'workout', occurred_at: draft.startedAt, source: 'manual', data } as Entry);
     if (keepTemplate) {
