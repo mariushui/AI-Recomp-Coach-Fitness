@@ -363,7 +363,7 @@ function toRows(v: unknown): string[] {
 
 /** "5,2 km" / "5230 m" / "5.2" → km. Ohne Einheit: unter 100 = km, sonst Meter. */
 export function parseDistanceKm(s: string): number | undefined {
-  const v = parseNumber(s);
+  const v = parseNumber(s, true);
   if (v === undefined || v <= 0) return undefined;
   const l = s.toLowerCase();
   if (/\bkm\b/.test(l)) return Math.round(v * 100) / 100;
@@ -428,9 +428,9 @@ function parseWorkouts(block: any, warnings: string[], tz: string): WorkoutRow[]
       ...sportFromActivity(label),
       session_type: 'training',
       duration_min,
-      kcal: kcal && kcal[i] ? parseNumber(kcal[i]) : undefined,
+      kcal: kcal && kcal[i] ? parseNumber(kcal[i], true) : undefined,
       distance_km: dist && dist[i] ? parseDistanceKm(dist[i]) : undefined,
-      avg_hr: hr && hr[i] ? parseNumber(hr[i]) : undefined,
+      avg_hr: hr && hr[i] ? parseNumber(hr[i], true) : undefined,
       notes: `Apple Health: ${label.trim()}`,
     };
     for (const k of Object.keys(data) as (keyof WorkoutData)[]) if (data[k] === undefined) delete data[k];
