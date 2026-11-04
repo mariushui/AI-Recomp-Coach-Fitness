@@ -13,7 +13,7 @@ export const CHARTS = [
   { key: 'sleep', label: 'Schlaf' },
   { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
   { key: 'recovery', label: 'Erholung und Belastung' },
-  { key: 'balance', label: 'Balance: Belastung zu Erholung' },
+  { key: 'balance', label: 'Potenzial genutzt' },
 ] as const;
 export type ChartKey = (typeof CHARTS)[number]['key'];
 export const CHART_LABEL = Object.fromEntries(CHARTS.map((c) => [c.key, c.label])) as Record<ChartKey, string>;

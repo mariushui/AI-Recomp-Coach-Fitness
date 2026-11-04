@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Area, Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
-import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainLabel, strainTarget } from '../lib/recovery';
+import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, potentialSummary, recoveryLabel, sleepScore, strainLabel, strainTarget, strainVsTarget, ZONE_COLOR } from '../lib/recovery';
 import RingCalendar, { type RingDay } from './RingCalendar';
 import { SLOTS, SLOT_COLOR, SLOT_LABEL, mealBreakdown, slotSeries, type Macro } from '../lib/meals';
 import { matchPlans } from '../lib/plans';
@@ -313,6 +313,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     return { day: d.day, value: pct, max: 100, color: '#8B5CF6' };
   });
   const lastBalance = [...days].reverse().map((d: any) => d.balance).find((b) => typeof b === 'number');
+  const potential = potentialSummary(days as any);
   const strainAvg = (n: number) => {
     const v = days.slice(-n).map((d: any) => d.strain ?? 0);
     return v.length ? Math.round((v.reduce((a: number, b: number) => a + b, 0) / v.length) * 10) / 10 : undefined;
@@ -600,22 +601,23 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
           </ComposedChart>
         </Chart>
       ),
-    balance: show('balance') && has(rows, 'balance') && (
+    balance: show('balance') && potential && (
         <Chart
           title={CHART_LABEL.balance}
-          summary={`${balanceLabel(lastBalance).text} · Ø Belastung 7 Tage ${strainAvg(7)?.toLocaleString('de-DE') ?? '–'}, 28 Tage ${strainAvg(28)?.toLocaleString('de-DE') ?? '–'}`}
-          hint="7-Tage-Mittel von Belastung minus Mitte deines Zielbereichs. Im grauen Band trainierst du passend zur Erholung. Rot darüber = Überlastung, blau darunter = erholsam mit Luft nach oben. Die Zahlen rechts: mittlere Belastung der letzten 7 und 28 Tage, kurzfristig deutlich über langfristig heißt steiler Anstieg."
+          summary={`Letzte ${potential.days} Tage: ${potential.pct} % deines Potenzials genutzt, ${potential.inTarget} von ${potential.days} Tagen im Ziel. ${potential.text}.`}
+          hint="Wie bei Athlytic: Aus deiner Erholung ergibt sich jeden Tag ein Zielbereich für die Belastung (grünes Band). Balken = deine Belastung. Grün = im Ziel, grau = darunter, Luft nach oben, orange = darüber. Potenzial genutzt = Belastung geteilt durch die Mitte des Zielbereichs, im Schnitt der letzten 7 Tage. 100 % heißt: genau die Mitte getroffen. Ruhetage zählen mit 0 %, deshalb ist eine Woche mit 2 Ruhetagen bei etwa 70 bis 85 % völlig normal."
         >
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
-            <YAxis {...axis} domain={[(min: number) => Math.min(-3, Math.floor(min)), (max: number) => Math.max(3, Math.ceil(max))]} width={30} tickFormatter={(v: number) => (v > 0 ? `+${v}` : String(v))} />
+            <YAxis {...axis} domain={[0, 10]} width={30} ticks={[0, 3.3, 6.6, 10]} tickFormatter={(v: number) => v.toFixed(1)} />
             <Tooltip {...tooltipStyle} formatter={(v: any, name: string) => (Array.isArray(v) ? [`${v[0]} bis ${v[1]}`, name] : [v, name])} />
-            <ReferenceArea y1={-BALANCE_BAND} y2={BALANCE_BAND} shape={(p: any) => <rect x={p.x} y={p.y} width={p.width} height={p.height} fill="#94a3b8" fillOpacity={0.15} />} />
-            <ReferenceLine y={0} stroke="#334155" />
-            <Area dataKey="balOver" name="Überlastung" stroke="none" fill="#FF375F" fillOpacity={0.55} connectNulls={false} isAnimationActive={false} />
-            <Area dataKey="balUnder" name="Erholsam" stroke="none" fill="#38BDF8" fillOpacity={0.5} connectNulls={false} isAnimationActive={false} />
-            <Line dataKey="balance" name="Balance" stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls />
+            <Area dataKey="strainBand" name="Zielbereich" stroke="none" fill="#ADFF2F" fillOpacity={0.12} connectNulls isAnimationActive={false} />
+            <Bar dataKey="strain" name="Belastung" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+              {rows.map((r, i) => (
+                <Cell key={i} fill={ZONE_COLOR[strainVsTarget(r.strain, r.strainLo !== undefined ? { lo: r.strainLo, hi: r.strainHi } : undefined) ?? 'unter']} />
+              ))}
+            </Bar>
           </ComposedChart>
         </Chart>
       ),
