@@ -9,6 +9,7 @@ import {
   type StrengthSet,
 } from '../supabase/functions/_shared/domain';
 import { summarize } from '../lib/format';
+import { parseText } from '../lib/entries';
 import { EntryIcon, Icons } from './icons';
 import { fromInputValue, toInputValue } from '../lib/time';
 import { Card, NumberField, ScaleField, SelectField, TextField, Label } from './ui';
@@ -34,7 +35,41 @@ interface Props {
 
 const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false, hideTime = false, header, extra }) => {
   const [open, setOpen] = useState(defaultOpen);
+  const [recalc, setRecalc] = useState<'idle' | 'busy' | 'error' | 'done'>('idle');
+  const [recalcMsg, setRecalcMsg] = useState('');
   const d = draft.data ?? {};
+
+  /** Nährwerte aus Beschreibung und Zutaten neu schätzen lassen. Zeit, Mahlzeit und Text bleiben, wie sie sind. */
+  const recalcNutrition = async () => {
+    const items = Array.isArray(d.items) ? d.items.map((i: any) => (i.amount ? `${i.amount} ${i.name}` : i.name)).join(', ') : '';
+    const text = [d.description, items && `Zutaten: ${items}`].filter(Boolean).join('. ');
+    if (!text.trim()) {
+      setRecalc('error');
+      setRecalcMsg('Erst bei „Was“ eintragen, was du gegessen hast.');
+      return;
+    }
+    setRecalc('busy');
+    try {
+      const r = await parseText(`Nur Nährwerte schätzen, eine Mahlzeit: ${text}`);
+      const meals = r.entries.filter((e) => e.kind === 'meal').map((e) => e.data as any);
+      if (meals.length === 0) throw new Error('Keine Nährwerte erkannt.');
+      const sum = (k: string) => {
+        const v = meals.map((m) => m[k]).filter((x) => typeof x === 'number');
+        return v.length ? Math.round(v.reduce((a: number, b: number) => a + b, 0)) : undefined;
+      };
+      const next: any = { ...d, protein_g: sum('protein_g'), kcal: sum('kcal'), carbs_g: sum('carbs_g'), fat_g: sum('fat_g') };
+      const newItems = meals.flatMap((m) => m.items ?? []);
+      if (newItems.length && !d.items?.length) next.items = newItems;
+      next.confidence = meals[0].confidence;
+      for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
+      onChange({ ...draft, data: next });
+      setRecalc('done');
+      setRecalcMsg('');
+    } catch (e) {
+      setRecalc('error');
+      setRecalcMsg(e instanceof Error ? e.message : 'KI nicht erreichbar.');
+    }
+  };
   const set = (key: string, value: unknown) => {
     const next = { ...d };
     if (value === undefined) delete next[key];
@@ -100,6 +135,16 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
                 <NumberField label="Kohlenhydrate" unit="g" value={d.carbs_g} onChange={(v) => set('carbs_g', v)} />
                 <NumberField label="Fett" unit="g" value={d.fat_g} onChange={(v) => set('fat_g', v)} />
               </div>
+              <button
+                type="button"
+                onClick={recalcNutrition}
+                disabled={recalc === 'busy'}
+                className="w-full rounded-xl border border-cyber-purple/40 bg-cyber-purple/10 py-2.5 text-sm font-bold text-cyber-purple disabled:opacity-60"
+              >
+                {recalc === 'busy' ? 'Berechne …' : 'Nährwerte neu berechnen'}
+              </button>
+              {recalc === 'done' && <p className="text-xs text-cyber-green">Neu berechnet aus „Was“ und den Zutaten. Prüfen und speichern.</p>}
+              {recalc === 'error' && <p className="text-xs text-[#FF375F]">{recalcMsg}</p>}
               {d.confidence && (
                 <p className="text-xs text-slate-500">
                   KI-Schätzung, Sicherheit: {{ low: 'niedrig', medium: 'mittel', high: 'hoch' }[d.confidence as string]}

@@ -9,6 +9,7 @@ import type { PlanData } from '../supabase/functions/_shared/domain';
 import { EntryIcon, Icons } from './icons';
 import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
+import SwipeToDelete from './SwipeToDelete';
 import { Button, Card, ErrorBox } from './ui';
 import TodayBar from './TodayBar';
 
@@ -117,6 +118,8 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
       setUsedVoice(false);
       setQuestions(r.questions);
       if (photo && r.entries.length > 0) setPhoto(null);
+      // Übernommen: Eingabefeld leeren, der Originaltext steckt in den Entwürfen (raw_text)
+      if (r.entries.length > 0) setText('');
       if (/(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(text)) setAsTemplate(true);
     } catch (e: any) {
       setError(`KI nicht erreichbar: ${e.message}. Der Text bleibt erhalten, du kannst ihn als Notiz speichern.`);
@@ -127,6 +130,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
 
   const saveAsNote = () => {
     setDrafts((prev) => [...prev, { kind: 'note', occurred_at: localIso(), data: { text }, source: usedVoice ? 'voice' : 'text', raw_text: text }]);
+    setText('');
   };
 
   const saveAll = async () => {
@@ -260,13 +264,14 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
         <div className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Prüfen und speichern</p>
           {drafts.map((d, i) => (
-            <EntryEditor
-              key={i}
-              draft={d}
-              defaultOpen={d.manual}
-              onChange={(nd) => setDrafts((prev) => prev.map((x, j) => (j === i ? nd : x)))}
-              onRemove={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}
-            />
+            <SwipeToDelete key={i} onDelete={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}>
+              <EntryEditor
+                draft={d}
+                defaultOpen={d.manual}
+                onChange={(nd) => setDrafts((prev) => prev.map((x, j) => (j === i ? nd : x)))}
+                onRemove={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}
+              />
+            </SwipeToDelete>
           ))}
           {drafts.some((d) => d.kind === 'plan') && (
             <label className="flex items-start gap-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 px-3 py-3">

@@ -25,8 +25,10 @@ Aus einem Foto (Kamera oder Mediathek) schätzt die KI Zutaten, Mengen und Makro
 
 **workout** (Training): `sport` (tennis, laufen, capoeira, kraft, rad, schwimmen, mobility, sonstiges), `sport_label` (nur bei sonstiges), `session_type` (training, stunde, match, wettkampf, frei), `duration_min`, `rpe` (1-10).
 Technik-Sport (Tennis, Capoeira): `focus`, `high`, `low`, `result`, `opponent`.
-Ausdauer: `distance_km`, `avg_pace`, `avg_hr`.
+Ausdauer: `distance_km`, `avg_pace`, `avg_hr`. Dazu `kcal` (aktive Kalorien, meist aus Apple Health).
 Kraft: `exercises[]` mit `exercise`, `sets`, `reps`, `weight_kg`, `rpe`.
+Trainings aus Apple Health kommen über den Kurzbefehl als `kind = workout`, `source = health`, `external_id = workout:<Start-ISO>`, `notes = "Apple Health: <Aktivität>"`. Die Apple-Aktivität wird auf `sport` abgebildet (`_shared/workouts.ts`), Unbekanntes wird `sonstiges` mit `sport_label`.
+Zusammenführung: Ein diktiertes Training trifft am selben Tag auf ein Apple-Training derselben Sportart, dann gibt es nur einen Eintrag. Das Diktat ist Haupteintrag (RPE, Fokus, Übungen), Apple liefert Dauer, Kalorien, Distanz und Puls, wo das Diktat nichts hat. Gilt in beiden Richtungen (Server beim Empfang, App beim Speichern).
 
 **plan** (vorgenommene Einheit): gleiche Felder wie workout für Sport, Art, Dauer, Intensität (`rpe`), `focus`, `distance_km`, `exercises[]`, `notes`. Dazu `goal` (messbares Ziel), `status` (`ausgefallen`, oder `entfernt` für eine aus dem Wochenplan gestrichene Einheit), `skip_reason`.
 `occurred_at` ist der geplante Zeitpunkt. Pläne entstehen per Sprache („Donnerstag 18 Uhr Tennis, Fokus Rückhand“) oder von Hand im Kalender.
@@ -61,6 +63,7 @@ Bei `stress`, `soreness` und `joint_pain` heißt 5 „stark“. Sonst heißt 5 �
 - Schritte, aktive Kalorien und Trainingsminuten: pro Tag die Quelle mit den meisten Schritten, damit iPhone und Watch nicht doppelt zählen. Blutsauerstoff: Tagesmittel in Prozent.
 - Magere Körpermasse = Gewicht x (1 - KFA), nur an Tagen mit beiden Werten.
 - Gewicht wird als 7-Tage-Schnitt gezeigt, weil Tageswerte um 1 bis 2 kg schwanken.
+- Belastung (0 bis 10): Last = Summe Trainingsminuten x RPE (ohne RPE ein Wert je Sportart: Laufen 7, Tennis, Capoeira, Kraft, Schwimmen 6, Rad 5, Sonstiges 4, Mobility 3), plus Apple-Trainingsminuten ohne zugehöriges Training x 4. Belastung = 10 x (1 - e^(-Last/930)). Marathon nahe 10, Mitteldistanz-Triathlon 9,3, 2 h Tennis mit Rad und Alltag 6,5 bis 7,5 (`lib/recovery.ts`).
 
 ## Bewusst noch nicht drin
 

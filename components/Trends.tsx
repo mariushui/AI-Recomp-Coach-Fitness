@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
-import { BASELINE_DAYS, dailyRecovery, dailyStrain } from '../lib/recovery';
+import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainLabel, strainTarget } from '../lib/recovery';
+import RingCalendar, { type RingDay } from './RingCalendar';
+import { SLOTS, SLOT_COLOR, SLOT_LABEL, mealBreakdown, slotSeries, type Macro } from '../lib/meals';
 import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
 import { loadCharts } from '../lib/chartPrefs';
-import { addDays, dayKey, startOfDay } from '../lib/time';
+import { addDays, dayKey, startOfDay, weekKey } from '../lib/time';
+const weekOf = (day: string) => weekKey(new Date(day + 'T12:00:00'));
 import { aggregate, buckets, granularityFor, trainingRows } from './trendData';
 import { Card, ErrorBox } from './ui';
 
@@ -65,6 +68,12 @@ const HEART: Series[] = [
   { key: 'hrRecovery', label: 'Cardio-Erholung bpm', color: '#ADFF2F' },
 ];
 
+/** Punkt der Erholungslinie in der Ampelfarbe des Werts */
+const RecoveryDot: React.FC<any> = ({ cx, cy, value }) => {
+  if (typeof cx !== 'number' || typeof cy !== 'number' || value === undefined || value === null) return null;
+  return <circle cx={cx} cy={cy} r={3.5} fill={recoveryLabel(value).color} stroke="#0a0a0b" strokeWidth={1} />;
+};
+
 const axis = { stroke: '#475569', fontSize: 11 };
 const tooltipStyle = { contentStyle: { background: '#121214', border: '1px solid #333', borderRadius: 12, fontSize: 12 } };
 
@@ -100,7 +109,7 @@ const useToggleSet = (initial: string[]) => {
   return [on, toggle] as const;
 };
 
-const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls?: React.ReactNode; children: React.ReactElement }> = ({ title, summary, hint, controls, children }) => {
+const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls?: React.ReactNode; plain?: boolean; children: React.ReactElement }> = ({ title, summary, hint, controls, plain, children }) => {
   const [open, setOpen] = useState(false);
   return (
   <Card>
@@ -123,11 +132,15 @@ const Chart: React.FC<{ title: string; summary?: string; hint?: string; controls
     </div>
     {hint && open && <p className="text-xs text-slate-400 mt-2 rounded-lg bg-cyber-black/60 px-3 py-2">{hint}</p>}
     {controls && <div className="mt-2">{controls}</div>}
-    <div className="h-52 mt-3">
-      <ResponsiveContainer width="100%" height="100%">
-        {children}
-      </ResponsiveContainer>
-    </div>
+    {plain ? (
+      <div className="mt-3">{children}</div>
+    ) : (
+      <div className="h-52 mt-3">
+        <ResponsiveContainer width="100%" height="100%">
+          {children}
+        </ResponsiveContainer>
+      </div>
+    )}
   </Card>
   );
 };
@@ -136,6 +149,8 @@ const has = (rows: Record<string, any>[], k: string) => rows.some((r) => typeof 
 
 const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [range, setRangeState] = useState<Range>(loadRange);
+  const [ringMode, setRingMode] = useState<'recovery' | 'strain' | 'sleep'>('recovery');
+  const [mealMacro, setMealMacro] = useState<Macro>('protein');
   const setRange = (r: Range) => {
     setRangeState(r);
     try {
@@ -191,13 +206,20 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     const recovery = dailyRecovery(ext);
     const strain = dailyStrain([...pre, ...entries], ext);
     const recByDay = new Map(ext.map((d, i) => [d.day, recovery[i]]));
+    const balance = balanceSeries(ext.map((d, i) => ({ recovery: recovery[i], strain: strain.get(d.day) })));
+    const balByDay = new Map(ext.map((d, i) => [d.day, balance[i]]));
     days.forEach((d) => {
-      (d as any).recovery = recByDay.get(d.day);
+      const r = recByDay.get(d.day);
+      (d as any).recovery = r;
       (d as any).strain = strain.get(d.day);
+      const t = strainTarget(r);
+      (d as any).strainLo = t?.lo;
+      (d as any).strainHi = t?.hi;
+      (d as any).balance = balByDay.get(d.day);
     });
     const bs = buckets(from, to, g, range);
     const rows = aggregate(days as any, bs, [
-      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any,
+      'weight', 'fatMass', 'leanMass', 'muscle', 'bodyFat', 'bmi' as any, 'recovery' as any, 'strain' as any, 'strainLo' as any, 'strainHi' as any, 'balance' as any,
       'protein', 'carbs', 'fat', 'kcal',
       'steps', 'activeKcal', 'exerciseMin',
       'restingHr', 'hrv', 'hrRecovery', 'sleepH', 'vo2max', 'spo2',
@@ -211,6 +233,11 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
     } else {
       rows.forEach((r) => BODY.forEach((s) => (r[`${s.key}Line`] = r[s.key])));
     }
+    rows.forEach((r) => {
+      r.strainBand = r.strainLo !== undefined && r.strainHi !== undefined ? [r.strainLo, r.strainHi] : undefined;
+      r.balOver = typeof r.balance === 'number' && r.balance > BALANCE_BAND ? [BALANCE_BAND, r.balance] : undefined;
+      r.balUnder = typeof r.balance === 'number' && r.balance < -BALANCE_BAND ? [r.balance, -BALANCE_BAND] : undefined;
+    });
     const states = matchPlans(entries);
     const training = trainingRows(entries, states, bs, g);
     const today = dayKey(new Date());
@@ -230,6 +257,32 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       })
       .filter(Boolean)
       .join(' · ');
+  const todayKey = dayKey(new Date());
+  // Ernährung nach Mahlzeit: Tageswerte je Zeitfenster, bei Wochen Mittel über Tage mit Essen
+  const mealDaily = slotSeries(entries, mealMacro, (iso) => dayKey(iso));
+  const mealRows = rows.map((r) => {
+    const keys = g === 'day' ? [r.key as string] : (days as any[]).filter((d) => weekOf(d.day) === r.key).map((d) => d.day);
+    const withFood = keys.map((k) => mealDaily.get(k)).filter(Boolean) as Record<string, number>[];
+    const out: Record<string, any> = { key: r.key, label: r.label };
+    if (withFood.length) for (const s of SLOTS) out[s] = Math.round(withFood.reduce((a, x) => a + x[s], 0) / withFood.length);
+    return out;
+  });
+  const mealTable = mealBreakdown(entries);
+  const ringDays: RingDay[] = days.map((d: any) => {
+    if (ringMode === 'recovery') return { day: d.day, value: d.recovery, max: 100, color: recoveryLabel(d.recovery).color };
+    if (ringMode === 'strain') {
+      const l = strainLabel(d.strain);
+      const color = l === 'leicht' ? '#38BDF8' : l === 'moderat' ? '#FBBF24' : l === 'hoch' ? '#FF6B00' : l === 'sehr hoch' ? '#FF375F' : '#475569';
+      return { day: d.day, value: d.strain, max: 10, color };
+    }
+    const pct = sleepScore(d.sleepH);
+    return { day: d.day, value: pct, max: 100, color: '#8B5CF6' };
+  });
+  const lastBalance = [...days].reverse().map((d: any) => d.balance).find((b) => typeof b === 'number');
+  const strainAvg = (n: number) => {
+    const v = days.slice(-n).map((d: any) => d.strain ?? 0);
+    return v.length ? Math.round((v.reduce((a: number, b: number) => a + b, 0) / v.length) * 10) / 10 : undefined;
+  };
   const xAxis = <XAxis dataKey="label" {...axis} minTickGap={range <= 7 ? 0 : 20} interval={range <= 7 ? 0 : 'preserveStartEnd'} />;
 
   return (
@@ -252,6 +305,25 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       {g !== 'day' && <p className="text-[11px] text-slate-500 -mt-2">Ein Wert pro Woche: Mittelwert, Training als Summe.</p>}
       {error && <ErrorBox>{error}</ErrorBox>}
 
+      {show('rings') && range <= 30 && (
+        <Chart
+          plain
+          title="Ring-Kalender"
+          summary={ringMode === 'recovery' ? 'Erholung je Tag, 0 bis 100' : ringMode === 'strain' ? 'Belastung je Tag, 0 bis 10' : 'Schlaf je Nacht in Prozent von 9 h'}
+          controls={
+            <div className="flex gap-1.5">
+              {([['recovery', 'Erholung'], ['strain', 'Belastung'], ['sleep', 'Schlaf']] as const).map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setRingMode(k)} aria-pressed={ringMode === k} className={`rounded-full border px-2.5 py-1 text-xs font-bold ${ringMode === k ? 'text-slate-100 border-white/20 bg-white/5' : 'text-slate-500 border-white/5'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <RingCalendar days={ringDays} today={todayKey} />
+        </Chart>
+      )}
+
       {show('body') && has(rows, 'weight') && (
         <Chart
           title="Gewicht und Körper"
@@ -268,7 +340,9 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <YAxis yAxisId="pct" orientation="right" {...axis} domain={['dataMin - 2', 'dataMax + 2']} width={30} allowDecimals={false} hide={!bodyOn.has('bodyFat') && !bodyOn.has('bmi')} />
             <Tooltip {...tooltipStyle} />
             {dots && bodyOn.has('weight') && (
-              <Line yAxisId="weight" dataKey="weight" name="Gewicht (Tag)" stroke="none" dot={{ r: 1.5, fill: '#64748b', stroke: 'none' }} activeDot={false} isAnimationActive={false} />
+              <Line yAxisId="weight" dataKey="weight" name="Gewicht (Tag)" stroke="none" dot={{ r: range <= 7 ? 3 : 1.5, fill: range <= 7 ? '#ADFF2F' : '#64748b', stroke: 'none' }} activeDot={false} isAnimationActive={false}>
+                {range <= 7 && <LabelList dataKey="weight" position="top" offset={8} fontSize={11} fontWeight={700} fill="#e2e8f0" formatter={(v: any) => (typeof v === 'number' ? v.toFixed(1) : '')} />}
+              </Line>
             )}
             {BODY.filter((s) => bodyOn.has(s.key)).map((s) => (
               <Line
@@ -313,6 +387,84 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
               />
             ))}
           </ComposedChart>
+        </Chart>
+      )}
+
+      {show('meals') && mealTable.days > 0 && (
+        <Chart
+          plain
+          title="Ernährung nach Mahlzeit"
+          summary={`${mealTable.proteinMealsPerDay.toLocaleString('de-DE')} proteinreiche Mahlzeiten pro Tag (ab 30 g)`}
+          hint="Balken: wie sich der gewählte Nährwert auf Frühstück, Mittag, Abend und Snacks verteilt. Ohne Angabe der Mahlzeit entscheidet die Uhrzeit, Shakes und Ergänzungen zählen zu Snacks. Tabelle: Mittel pro Tag mit Essen im Zeitraum. Für die Recomposition zählen Protein über den Tag verteilt und ein Kaloriendefizit, Kohlenhydrate eher dort, wo du Konzentration oder Training brauchst."
+          controls={
+            <div className="flex gap-1.5 flex-wrap">
+              {MACROS.map((mm) => (
+                <button key={mm.key} type="button" onClick={() => setMealMacro(mm.key as Macro)} aria-pressed={mealMacro === mm.key} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${mealMacro === mm.key ? 'text-slate-100 border-white/20 bg-white/5' : 'text-slate-500 border-white/5'}`}>
+                  <span className="h-2 w-2 rounded-full" style={{ background: mm.color }} />
+                  {mm.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={mealRows}>
+                  <CartesianGrid stroke="#1e293b" vertical={false} />
+                  {xAxis}
+                  <YAxis {...axis} width={36} />
+                  <Tooltip {...tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                  {SLOTS.map((s, i) => (
+                    <Bar key={s} dataKey={s} name={SLOT_LABEL[s]} stackId="m" fill={SLOT_COLOR[s]} radius={i === SLOTS.length - 1 ? [3, 3, 0, 0] : undefined} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-2">
+              {SLOTS.map((s) => (
+                <span key={s} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: SLOT_COLOR[s] }} />
+                  {SLOT_LABEL[s]}
+                </span>
+              ))}
+            </div>
+            <table className="w-full mt-3 text-xs tabular-nums">
+              <thead>
+                <tr className="text-slate-500">
+                  <th className="text-left font-bold py-1">Ø pro Tag</th>
+                  <th className="text-right font-bold" style={{ color: '#ADFF2F' }}>Protein</th>
+                  <th className="text-right font-bold" style={{ color: '#FBBF24' }}>KH</th>
+                  <th className="text-right font-bold" style={{ color: '#FF375F' }}>Fett</th>
+                  <th className="text-right font-bold" style={{ color: '#8B5CF6' }}>kcal</th>
+                  <th className="text-right font-bold">Anteil</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mealTable.rows.map((r) => (
+                  <tr key={r.slot} className="border-t border-white/5 text-slate-200">
+                    <td className="py-1.5">
+                      <span className="inline-block h-2 w-2 rounded-sm mr-1.5" style={{ background: SLOT_COLOR[r.slot] }} />
+                      {SLOT_LABEL[r.slot]}
+                    </td>
+                    <td className="text-right">{r.avg.protein} g</td>
+                    <td className="text-right">{r.avg.carbs} g</td>
+                    <td className="text-right">{r.avg.fat} g</td>
+                    <td className="text-right">{r.avg.kcal}</td>
+                    <td className="text-right text-slate-400">{Math.round(r.share * 100)} %</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-white/10 font-bold text-slate-100">
+                  <td className="py-1.5">Summe</td>
+                  {(['protein', 'carbs', 'fat'] as const).map((k) => (
+                    <td key={k} className="text-right">{mealTable.rows.reduce((a, r) => a + r.avg[k], 0)} g</td>
+                  ))}
+                  <td className="text-right">{mealTable.rows.reduce((a, r) => a + r.avg.kcal, 0)}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </Chart>
       )}
 
@@ -397,17 +549,37 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         <Chart
           title="Erholung und Belastung"
           summary={`Ø Erholung ${average(days, 'recovery' as any) ?? '–'} · Ø Belastung ${average(days, 'strain' as any) ?? '–'} pro Tag`}
-          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Belastung (0 bis 21) = Trainingsminuten mal RPE geteilt durch 60, ohne RPE gilt 5. Hohe Belastung bei niedriger Erholung ist das Muster, das du vermeiden willst."
+          hint="Erholung (0 bis 100, 50 = dein Schnitt) aus HRV, Ruhepuls und Schlaf der Nacht, verglichen mit deinen letzten 30 Tagen. Punkte: grün ab 67, gelb ab 34, rot darunter. Belastung (0 bis 10, Marathon = 10) aus Trainingsminuten mal RPE, ohne RPE gilt ein Wert je Sportart. Das graue Band ist der Zielbereich der Belastung, er steigt mit der Erholung. Belastung im Band = passend trainiert, darüber bei roter Erholung ist das Muster, das du vermeiden willst."
         >
           <ComposedChart data={rows}>
             <CartesianGrid stroke="#1e293b" vertical={false} />
             {xAxis}
-            <YAxis yAxisId="rec" {...axis} domain={[0, 100]} width={30} ticks={[0, 25, 50, 75, 100]} />
-            <YAxis yAxisId="strain" orientation="right" {...axis} domain={[0, 21]} width={28} ticks={[0, 7, 14, 21]} />
-            <Tooltip {...tooltipStyle} />
-            <Bar yAxisId="strain" dataKey="strain" name="Belastung" fill="#FF6B00" fillOpacity={0.55} radius={[3, 3, 0, 0]} />
-            <ReferenceLine yAxisId="rec" y={50} stroke="#334155" strokeDasharray="3 3" />
-            <Line yAxisId="rec" dataKey="recovery" name="Erholung" stroke="#ADFF2F" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+            <YAxis yAxisId="strain" {...axis} domain={[0, 10]} width={30} ticks={[0, 3.3, 6.6, 10]} tickFormatter={(v: number) => v.toFixed(1)} />
+            <YAxis yAxisId="rec" orientation="right" {...axis} domain={[0, 100]} width={34} ticks={[0, 33, 66, 100]} unit="%" />
+            <Tooltip {...tooltipStyle} formatter={(v: any, name: string) => (Array.isArray(v) ? [`${v[0]} bis ${v[1]}`, name] : [v, name])} />
+            <Area yAxisId="strain" dataKey="strainBand" name="Zielbereich Belastung" stroke="none" fill="#94a3b8" fillOpacity={0.18} connectNulls isAnimationActive={false} />
+            <Line yAxisId="rec" dataKey="recovery" name="Erholung %" stroke="#94a3b8" strokeWidth={2} dot={<RecoveryDot />} connectNulls />
+            <Line yAxisId="strain" dataKey="strain" name="Belastung" stroke="#38BDF8" strokeWidth={2} dot={{ r: 2.5, fill: '#38BDF8', stroke: 'none' }} connectNulls />
+          </ComposedChart>
+        </Chart>
+      )}
+
+      {show('balance') && has(rows, 'balance') && (
+        <Chart
+          title="Balance: Belastung zu Erholung"
+          summary={`${balanceLabel(lastBalance).text} · Ø Belastung 7 Tage ${strainAvg(7)?.toLocaleString('de-DE') ?? '–'}, 28 Tage ${strainAvg(28)?.toLocaleString('de-DE') ?? '–'}`}
+          hint="7-Tage-Mittel von Belastung minus Mitte deines Zielbereichs. Im grauen Band trainierst du passend zur Erholung. Rot darüber = Überlastung, blau darunter = erholsam mit Luft nach oben. Die Zahlen rechts: mittlere Belastung der letzten 7 und 28 Tage, kurzfristig deutlich über langfristig heißt steiler Anstieg."
+        >
+          <ComposedChart data={rows}>
+            <CartesianGrid stroke="#1e293b" vertical={false} />
+            {xAxis}
+            <YAxis {...axis} domain={[(min: number) => Math.min(-3, Math.floor(min)), (max: number) => Math.max(3, Math.ceil(max))]} width={30} tickFormatter={(v: number) => (v > 0 ? `+${v}` : String(v))} />
+            <Tooltip {...tooltipStyle} formatter={(v: any, name: string) => (Array.isArray(v) ? [`${v[0]} bis ${v[1]}`, name] : [v, name])} />
+            <ReferenceArea y1={-BALANCE_BAND} y2={BALANCE_BAND} shape={(p: any) => <rect x={p.x} y={p.y} width={p.width} height={p.height} fill="#94a3b8" fillOpacity={0.15} />} />
+            <ReferenceLine y={0} stroke="#334155" />
+            <Area dataKey="balOver" name="Überlastung" stroke="none" fill="#FF375F" fillOpacity={0.55} connectNulls={false} isAnimationActive={false} />
+            <Area dataKey="balUnder" name="Erholsam" stroke="none" fill="#38BDF8" fillOpacity={0.5} connectNulls={false} isAnimationActive={false} />
+            <Line dataKey="balance" name="Balance" stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls />
           </ComposedChart>
         </Chart>
       )}

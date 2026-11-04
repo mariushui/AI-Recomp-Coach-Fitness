@@ -3,12 +3,15 @@
 export const CHARTS = [
   { key: 'body', label: 'Gewicht und Körper' },
   { key: 'nutrition', label: 'Ernährung' },
+  { key: 'meals', label: 'Ernährung nach Mahlzeit' },
   { key: 'training', label: 'Training und Plan' },
   { key: 'activity', label: 'Aktivität (Schritte, Ringe)' },
   { key: 'heart', label: 'Herz: Ruhepuls, HRV, Cardio-Erholung' },
   { key: 'sleep', label: 'Schlaf' },
   { key: 'vo2', label: 'VO2max und Blutsauerstoff' },
   { key: 'recovery', label: 'Erholung und Belastung' },
+  { key: 'balance', label: 'Balance: Belastung zu Erholung (7 Tage)' },
+  { key: 'rings', label: 'Ring-Kalender (Woche und 30 Tage)' },
 ] as const;
 export type ChartKey = (typeof CHARTS)[number]['key'];
 

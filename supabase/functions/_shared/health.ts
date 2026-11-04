@@ -14,11 +14,13 @@
 //     "active_kcal": { "values": "...", "dates": "...", "sources": "..." },   (Bewegen-Ring)
 //     "exercise_min": { "values": "...", "dates": "...", "sources": "..." },  (Trainieren-Ring)
 //     "sleep":      { "values": "Kern\nTief\n...", "starts": "...", "ends": "..." }
-//   }
+//   },
+//   "workouts": { "types": "Tennis\nLaufen", "starts": "...", "ends": "...", "kcal": "412\n380", "distances": "\n5,2 km", "sources": "..." }
 // }
 // values/dates dürfen Text mit Zeilenumbrüchen oder JSON-Arrays sein.
 
-import type { HealthData, HealthMetric } from './domain.ts';
+import type { HealthData, HealthMetric, WorkoutData } from './domain.ts';
+import { sportFromActivity } from './workouts.ts';
 
 export interface HealthRow {
   metric: HealthMetric;
@@ -28,8 +30,17 @@ export interface HealthRow {
   data: HealthData;
 }
 
+/** Training aus Apple Health, wird als Eintrag kind = workout mit source = health gespeichert. */
+export interface WorkoutRow {
+  day: string;
+  occurred_at: string;
+  external_id: string; // workout:<Start-ISO>
+  data: WorkoutData;
+}
+
 export interface HealthParseResult {
   rows: HealthRow[];
+  workouts: WorkoutRow[];
   warnings: string[];
 }
 
@@ -338,11 +349,98 @@ function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: str
   return rows;
 }
 
+/** Wie toList, aber leere Zeilen bleiben erhalten, damit die Position zu den anderen Listen passt (Trainings ohne Distanz). */
+function toRows(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x ?? '').trim());
+  if (typeof v === 'string') return v.split(/\r?\n/).map((x) => x.trim());
+  if (typeof v === 'number') return [String(v)];
+  return [];
+}
+
+/** "5,2 km" / "5230 m" / "5.2" → km. Ohne Einheit: unter 100 = km, sonst Meter. */
+export function parseDistanceKm(s: string): number | undefined {
+  const v = parseNumber(s);
+  if (v === undefined || v <= 0) return undefined;
+  const l = s.toLowerCase();
+  if (/\bkm\b/.test(l)) return Math.round(v * 100) / 100;
+  if (/\bmi\b|meile/.test(l)) return Math.round(v * 1.609344 * 100) / 100;
+  if (/\bm\b/.test(l) || v >= 100) return Math.round((v / 1000) * 100) / 100;
+  return Math.round(v * 100) / 100;
+}
+
+/** "1:06:52" / "28:09" / "3721" (Sekunden) / "62 min" → Minuten */
+export function parseDurationMin(s: string): number | undefined {
+  const t = s.trim();
+  const m = t.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
+  if (m) return Math.round(((Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3])) / 60) * 10) / 10;
+  const v = parseNumber(t);
+  if (v === undefined || v <= 0) return undefined;
+  if (/min/.test(t.toLowerCase())) return Math.round(v * 10) / 10;
+  if (/\bh\b|std/.test(t.toLowerCase())) return Math.round(v * 60);
+  // nackte Zahl: Kurzbefehle gibt Dauern in Sekunden aus
+  return Math.round((v / 60) * 10) / 10;
+}
+
+function parseWorkouts(block: any, warnings: string[], tz: string): WorkoutRow[] {
+  const types = toRows(block?.types);
+  const starts = toRows(block?.starts);
+  const ends = toRows(block?.ends);
+  if (types.every((t) => !t)) return [];
+  if (types.length !== starts.length) {
+    warnings.push(`workouts: ${types.length} Trainings, aber ${starts.length} Startzeiten. Übersprungen.`);
+    return [];
+  }
+  const n = types.length;
+  const opt = (key: string) => {
+    const l = toRows(block?.[key]);
+    return l.length === n ? l : null;
+  };
+  const endList = ends.length === n ? ends : null;
+  const kcal = opt('kcal');
+  const dist = opt('distances');
+  const dur = opt('durations');
+  const hr = opt('avg_hr');
+  const rows: WorkoutRow[] = [];
+  const seen = new Set<string>();
+  types.forEach((label, i) => {
+    if (!label && !starts[i]) return;
+    const s = parseDate(starts[i], tz);
+    if (!s) {
+      warnings.push(`workouts: Zeile ${i + 1}, Startzeit nicht lesbar ("${starts[i]}").`);
+      return;
+    }
+    const e = endList && endList[i] ? parseDate(endList[i], tz) : undefined;
+    let duration_min: number | undefined;
+    if (e && e.ms > s.ms) duration_min = Math.round((e.ms - s.ms) / 60000);
+    else if (dur && dur[i]) duration_min = parseDurationMin(dur[i]);
+    if (duration_min !== undefined && (duration_min < 1 || duration_min > 600)) {
+      warnings.push(`workouts: Zeile ${i + 1}, Dauer ${duration_min} min unplausibel. Übersprungen.`);
+      return;
+    }
+    const external_id = `workout:${s.iso}`;
+    if (seen.has(external_id)) return;
+    seen.add(external_id);
+    const data: WorkoutData = {
+      ...sportFromActivity(label),
+      session_type: 'training',
+      duration_min,
+      kcal: kcal && kcal[i] ? parseNumber(kcal[i]) : undefined,
+      distance_km: dist && dist[i] ? parseDistanceKm(dist[i]) : undefined,
+      avg_hr: hr && hr[i] ? parseNumber(hr[i]) : undefined,
+      notes: `Apple Health: ${label.trim()}`,
+    };
+    for (const k of Object.keys(data) as (keyof WorkoutData)[]) if (data[k] === undefined) delete data[k];
+    if (data.kcal !== undefined) data.kcal = Math.round(data.kcal);
+    rows.push({ day: s.day, occurred_at: s.iso, external_id, data });
+  });
+  return rows;
+}
+
 export function parseHealthPayload(body: any): HealthParseResult {
   const warnings: string[] = [];
   const metrics = body?.metrics;
   if (!metrics || typeof metrics !== 'object') {
-    return { rows: [], warnings: ['Kein Feld "metrics" im Paket gefunden.'] };
+    return { rows: [], workouts: [], warnings: ['Kein Feld "metrics" im Paket gefunden.'] };
   }
   // Optionales Feld tz (IANA), falls das iPhone in einer anderen Zeitzone steht.
   let tz = DEFAULT_TZ;
@@ -365,5 +463,16 @@ export function parseHealthPayload(body: any): HealthParseResult {
   for (const k of Object.keys(metrics)) {
     if (!(k in POINT_METRICS) && !['sleep', 'steps', 'active_kcal', 'exercise_min'].includes(k)) warnings.push(`Unbekannte Kennzahl "${k}" ignoriert.`);
   }
-  return { rows, warnings };
+  // Trainings: "workouts" plus Kandidaten "workouts2" (zwei Varianten im Kurzbefehl, eine davon liefert).
+  const workouts: WorkoutRow[] = [];
+  const ids = new Set<string>();
+  for (const key of ['workouts', 'workouts2']) {
+    if (!body[key]) continue;
+    for (const w of parseWorkouts(body[key], warnings, tz)) {
+      if (ids.has(w.external_id)) continue;
+      ids.add(w.external_id);
+      workouts.push(w);
+    }
+  }
+  return { rows, workouts, warnings };
 }

@@ -5,16 +5,23 @@
 // gewichtet: HRV 50 %, Ruhepuls 30 %, Schlaf 20 %. Fehlt eine Kennzahl, werden die anderen neu gewichtet.
 // Mindestens 7 Tage Vergleichswerte je Kennzahl, sonst zählt sie nicht.
 //
-// Belastung (0 bis 21 pro Tag, Skala wie bei Athlytic): Summe über Trainings von Dauer in Minuten x RPE, geteilt durch 60.
-// Ohne RPE gilt 5. Gibt es an einem Tag kein eigenes Training, zählen die Trainingsminuten aus Apple Health mit RPE 5.
+// Belastung (0 bis 10 pro Tag): Last = Summe über Trainings von Dauer in Minuten x RPE, dazu Trainingsminuten aus Apple
+// Health, die kein Training abdeckt, mit RPE 4. Ohne RPE gilt ein Wert je Sportart (Laufen 7, Tennis 6, Kraft 6, Rad 5,
+// Mobility 3). Belastung = 10 x (1 - e^(-Last / 930)). Die Skala steigt unten schnell und wird oben sehr zäh:
+// Marathon nahe 10, Mitteldistanz-Triathlon 9,3, 2 h Tennis mit Rad und normalem Tag 6,5 bis 7,5, 1 h lockerer Lauf 3,6.
 
-import type { Entry, WorkoutData } from '../supabase/functions/_shared/domain';
+import type { Entry, Sport, WorkoutData } from '../supabase/functions/_shared/domain';
 import type { DayStats } from './stats';
 import { dayKey } from './time';
 
 export const BASELINE_DAYS = 30;
 export const MIN_BASELINE = 7;
-export const STRAIN_MAX = 21;
+export const STRAIN_MAX = 10;
+export const STRAIN_K = 930; // Last, bei der 63 % der Skala erreicht sind
+
+/** Gefühlte Belastung je Sportart, wenn kein RPE diktiert wurde. */
+export const DEFAULT_RPE: Record<Sport, number> = { laufen: 7, tennis: 6, capoeira: 6, kraft: 6, schwimmen: 6, rad: 5, sonstiges: 4, mobility: 3 };
+export const EXTRA_MINUTES_RPE = 4; // Apple-Trainingsminuten ohne zugehöriges Training (Spaziergang, E-Bike, Alltag)
 
 interface MetricCfg {
   key: 'hrv' | 'restingHr' | 'sleepH';
@@ -65,36 +72,100 @@ export function dailyRecovery(days: DayStats[]): (number | undefined)[] {
   return days.map((_, i) => recoveryAt(days, i));
 }
 
+/** Last → Belastung 0 bis 10 */
+export function strainFromLoad(load: number): number {
+  if (load <= 0) return 0;
+  return Math.round(STRAIN_MAX * (1 - Math.exp(-load / STRAIN_K)) * 10) / 10;
+}
+
 /** Belastung je Tag (Schlüssel YYYY-MM-DD). */
 export function dailyStrain(entries: Entry[], days: DayStats[]): Map<string, number> {
-  const manual = new Map<string, number>();
+  const load = new Map<string, number>();
+  const minutes = new Map<string, number>();
   for (const e of entries) {
     if (e.kind !== 'workout') continue;
     const w = e.data as WorkoutData;
     const min = w.duration_min ?? 0;
     if (min <= 0) continue;
     const k = dayKey(e.occurred_at);
-    manual.set(k, (manual.get(k) ?? 0) + (min * (w.rpe ?? 5)) / 60);
+    load.set(k, (load.get(k) ?? 0) + min * (w.rpe ?? DEFAULT_RPE[w.sport] ?? 4));
+    minutes.set(k, (minutes.get(k) ?? 0) + min);
   }
   const out = new Map<string, number>();
   for (const d of days) {
-    let v = manual.get(d.day);
-    if (v === undefined && d.exerciseMin) v = (d.exerciseMin * 5) / 60;
-    if (v !== undefined) out.set(d.day, Math.round(clamp(v, 0, STRAIN_MAX) * 10) / 10);
+    let l = load.get(d.day) ?? 0;
+    const extra = (d.exerciseMin ?? 0) - (minutes.get(d.day) ?? 0);
+    if (extra > 0) l += extra * EXTRA_MINUTES_RPE;
+    if (l > 0) out.set(d.day, strainFromLoad(l));
   }
   return out;
 }
 
+/**
+ * Zielbereich der Belastung je nach Erholung, wie der Zielkorridor bei Athlytic: gut erholt darf mehr.
+ * Erholung 100 → 6,1 bis 8,5, Erholung 74 → 4,6 bis 7,0, Erholung 30 → 2,2 bis 4,6.
+ */
+export function strainTarget(recovery: number | undefined): { lo: number; hi: number } | undefined {
+  if (recovery === undefined) return undefined;
+  const lo = Math.round((0.5 + clamp(recovery, 0, 100) * 0.056) * 10) / 10;
+  return { lo, hi: Math.round((lo + 2.4) * 10) / 10 };
+}
+
+/** Wo steht die Belastung zum Zielbereich? */
+export function strainVsTarget(strain: number | undefined, target: { lo: number; hi: number } | undefined): 'unter' | 'im Ziel' | 'über' | undefined {
+  if (strain === undefined || !target) return undefined;
+  if (strain < target.lo) return 'unter';
+  if (strain > target.hi) return 'über';
+  return 'im Ziel';
+}
+
+export const BALANCE_BAND = 1.2; // halbe Breite des Zielbereichs
+export const BALANCE_WINDOW = 7;
+
+/**
+ * Balance zwischen Belastung und Erholung, wie "Recovery-Based Training" bei Athlytic:
+ * je Tag Belastung minus Mitte des Zielbereichs, davon das gleitende 7-Tage-Mittel.
+ * Über +1,2 = Überlastung, unter -1,2 = erholsam, dazwischen passend. Tage ohne Belastung zählen als 0.
+ */
+export function balanceSeries(days: { recovery?: number; strain?: number }[]): (number | undefined)[] {
+  const daily = days.map((d) => {
+    const t = strainTarget(d.recovery);
+    if (!t) return undefined;
+    return (d.strain ?? 0) - (t.lo + t.hi) / 2;
+  });
+  return daily.map((_, i) => {
+    const win = daily.slice(Math.max(0, i - BALANCE_WINDOW + 1), i + 1).filter((v): v is number => v !== undefined);
+    if (win.length < 3) return undefined;
+    return Math.round((win.reduce((a, b) => a + b, 0) / win.length) * 10) / 10;
+  });
+}
+
+export function balanceLabel(b: number | undefined): { text: string; color: string } {
+  if (b === undefined) return { text: 'noch keine Balance', color: '#64748b' };
+  if (b > BALANCE_BAND) return { text: 'Überlastung', color: '#FF375F' };
+  if (b < -BALANCE_BAND) return { text: 'erholsam, Luft nach oben', color: '#38BDF8' };
+  return { text: 'passend trainiert', color: '#ADFF2F' };
+}
+
+export const SLEEP_FULL_H = 9; // 9 h Schlaf = 100 %, 7 h 30 = 83 %
+
+/** Schlaf der Nacht in Prozent eines vollen Schlafs. */
+export function sleepScore(sleepH: number | undefined): number | undefined {
+  if (sleepH === undefined) return undefined;
+  return Math.round(clamp(sleepH / SLEEP_FULL_H, 0, 1) * 100);
+}
+
 export function recoveryLabel(score: number | undefined): { text: string; color: string } {
   if (score === undefined) return { text: 'noch keine Vergleichswerte', color: '#64748b' };
-  if (score >= 67) return { text: 'gut erholt', color: '#ADFF2F' };
-  if (score >= 34) return { text: 'mittel', color: '#F59E0B' };
-  return { text: 'wenig erholt', color: '#FF375F' };
+  if (score >= 67) return { text: 'bereit für Training', color: '#ADFF2F' };
+  if (score >= 34) return { text: 'mittel erholt', color: '#F59E0B' };
+  return { text: 'wenig erholt, locker', color: '#FF375F' };
 }
 
 export function strainLabel(strain: number | undefined): string {
   if (strain === undefined || strain === 0) return 'keine Belastung';
-  if (strain < 7) return 'leicht';
-  if (strain < 14) return 'moderat';
-  return 'hoch';
+  if (strain < 3) return 'leicht';
+  if (strain < 6) return 'moderat';
+  if (strain < 8.5) return 'hoch';
+  return 'sehr hoch';
 }

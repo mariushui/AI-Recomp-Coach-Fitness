@@ -58,6 +58,8 @@ export function summarize(kind: EntryKind, data: any): string {
         w.duration_min !== undefined && `${w.duration_min} min`,
         w.rpe !== undefined && `RPE ${w.rpe}`,
         w.distance_km !== undefined && `${w.distance_km} km`,
+        w.kcal !== undefined && `${w.kcal} kcal`,
+        w.avg_hr !== undefined && `Ø ${w.avg_hr} bpm`,
         w.focus && `Fokus: ${w.focus}`,
         w.high && `↑ ${w.high}`,
         w.low && `↓ ${w.low}`,

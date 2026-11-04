@@ -11,6 +11,7 @@ import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, fromSlot, isVirtual, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
 import EntryEditor, { type Draft } from './EntryEditor';
+import SwipeToDelete from './SwipeToDelete';
 import TrainingPlanView from './TrainingPlanView';
 import { Button, Card, ErrorBox } from './ui';
 
@@ -137,7 +138,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
       setDraft(null);
     });
 
-  const remove = (id: string) =>
+  const remove = (id: string, ask = true) =>
     run(async () => {
       const e = entries.find((x) => x.id === id);
       if (e?.kind === 'plan' && (isVirtual(e) || fromSlot(e))) {
@@ -146,7 +147,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
         if (isVirtual(e)) await insertEntries([{ kind: 'plan', occurred_at: e.occurred_at, data, source: 'manual', external_id: e.external_id }]);
         else await updateEntry(e.id, { data });
       } else {
-        if (!confirm('Eintrag löschen?')) return;
+        if (ask && !confirm('Eintrag löschen?')) return;
         await deleteEntry(id);
       }
       setEditId(null);
@@ -370,7 +371,8 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
               editId === e.id ? (
                 <div key={e.id}>{editorBlock}</div>
               ) : (
-                <button key={e.id} onClick={() => startEdit(e)} className="w-full text-left">
+                <SwipeToDelete key={e.id} onDelete={() => remove(e.id, false)}>
+                <button onClick={() => startEdit(e)} className="w-full text-left">
                   <Card className="flex gap-3 items-start">
                     <EntryIcon kind={e.kind} data={e.data} className="text-cyber-purple shrink-0 mt-0.5" />
                     <span className="flex-1 min-w-0">
@@ -383,6 +385,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
                     <Icons.Right size={16} className="text-slate-600 shrink-0 mt-1" />
                   </Card>
                 </button>
+                </SwipeToDelete>
               ),
             )}
           {healthEntries.length > 0 && (
@@ -400,10 +403,12 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
                   editId === e.id ? (
                     <div key={e.id}>{editorBlock}</div>
                   ) : (
-                    <button key={e.id} onClick={() => startEdit(e)} className="w-full text-left flex justify-between gap-2 rounded-lg bg-cyber-black/60 px-3 py-2 text-sm">
+                    <SwipeToDelete key={e.id} onDelete={() => remove(e.id, false)} className="!rounded-lg">
+                    <button onClick={() => startEdit(e)} className="w-full text-left flex justify-between gap-2 rounded-lg bg-cyber-black/60 px-3 py-2 text-sm">
                       <span className="text-slate-200">{summarize('health', e.data)}</span>
                       <span className="text-slate-500 text-xs shrink-0">{formatTime(e.occurred_at)}</span>
                     </button>
+                    </SwipeToDelete>
                   ),
                 )}
             </Card>
