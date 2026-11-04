@@ -118,6 +118,8 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
       setUsedVoice(false);
       setQuestions(r.questions);
       if (photo && r.entries.length > 0) setPhoto(null);
+      // Übernommen: Eingabefeld leeren, der Originaltext steckt in den Entwürfen (raw_text)
+      if (r.entries.length > 0) setText('');
       if (/(jede[nr]? |immer|trainingsplan|wochenplan|regelmäßig)/i.test(text)) setAsTemplate(true);
     } catch (e: any) {
       setError(`KI nicht erreichbar: ${e.message}. Der Text bleibt erhalten, du kannst ihn als Notiz speichern.`);
@@ -128,6 +130,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
 
   const saveAsNote = () => {
     setDrafts((prev) => [...prev, { kind: 'note', occurred_at: localIso(), data: { text }, source: usedVoice ? 'voice' : 'text', raw_text: text }]);
+    setText('');
   };
 
   const saveAll = async () => {
