@@ -477,11 +477,11 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             <table className="w-full mt-3 text-xs tabular-nums">
               <thead>
                 <tr className="text-slate-500">
-                  <th className="text-left font-bold py-1">Verteilung im Zeitraum</th>
+                  <th className="text-left font-bold py-1">Ø pro Tag</th>
                   <th className="text-right font-bold" style={{ color: MACRO_COLORS.protein }}>Protein</th>
                   <th className="text-right font-bold" style={{ color: MACRO_COLORS.carbs }}>KH</th>
                   <th className="text-right font-bold" style={{ color: MACRO_COLORS.fat }}>Fett</th>
-                  <th className="text-right font-bold">Ø kcal</th>
+                  <th className="text-right font-bold" style={{ color: '#8B5CF6' }}>kcal</th>
                 </tr>
               </thead>
               <tbody>
@@ -497,26 +497,28 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
                         {SLOT_LABEL[sl]}
                       </td>
                       {(['protein', 'carbs', 'fat'] as const).map((k) => (
-                        <td key={k} className={`text-right ${off(k) ? 'font-bold text-[#FF6B00]' : ''}`}>
-                          {sp[k]} %
+                        <td key={k} className={`text-right ${off(k) ? 'font-bold text-[#FF6B00]' : ''}`} title={`${sp[k]} % der kcal`}>
+                          {row?.avg[k] ?? '–'} g
                         </td>
                       ))}
-                      <td className="text-right text-slate-400">{row?.avg.kcal ?? '–'}</td>
+                      <td className="text-right">{row?.avg.kcal ?? '–'}</td>
                     </tr>
                   );
                 })}
-                {target && (
-                  <tr className="border-t border-white/10 text-slate-400">
-                    <td className="py-1.5">Ziel</td>
-                    <td className="text-right">{target.protein} %</td>
-                    <td className="text-right">{target.carbs} %</td>
-                    <td className="text-right">{target.fat} %</td>
-                    <td />
-                  </tr>
-                )}
+                <tr className="border-t border-white/10 font-bold text-slate-100">
+                  <td className="py-1.5">Summe</td>
+                  {(['protein', 'carbs', 'fat'] as const).map((k) => (
+                    <td key={k} className="text-right">{mealTable.rows.reduce((a, r) => a + r.avg[k], 0)} g</td>
+                  ))}
+                  <td className="text-right">{mealTable.rows.reduce((a, r) => a + r.avg.kcal, 0)}</td>
+                </tr>
               </tbody>
             </table>
-            {target && <p className="text-[11px] text-slate-500 mt-2">Orange = mehr als 5 Prozentpunkte vom Ziel weg: zu wenig Protein, zu viel KH oder Fett.</p>}
+            {target && (
+              <p className="text-[11px] text-slate-500 mt-2">
+                Orange = Anteil an den kcal dieser Mahlzeit mehr als 5 Prozentpunkte vom Ziel ({target.protein} % Protein, {target.carbs} % KH, {target.fat} % Fett) weg: zu wenig Protein, zu viel KH oder Fett.
+              </p>
+            )}
           </div>
         </Chart>
       ),
