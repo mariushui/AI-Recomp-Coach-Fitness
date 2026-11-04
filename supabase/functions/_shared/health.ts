@@ -71,7 +71,7 @@ export function toList(v: unknown): string[] {
 }
 
 /** "82,4" / "82.4 kg" / "1.234,5" / "0,18" → Zahl */
-export function parseNumber(s: string): number | undefined {
+export function parseNumber(s: string, decimalDot = false): number | undefined {
   const m = s.match(/-?\d[\d.,\s]*/);
   if (!m) return undefined;
   let t = m[0].replace(/\s/g, '');
@@ -81,9 +81,10 @@ export function parseNumber(s: string): number | undefined {
     else t = t.replace(/,/g, '');
   } else if (t.includes(',')) {
     t = t.replace(',', '.');
-  } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+  } else if (decimalDot ? /^\d{1,3}(\.\d{3}){2,}$/.test(t) : /^\d{1,3}(\.\d{3})+$/.test(t)) {
     t = t.replace(/\./g, ''); // deutsche Tausenderpunkte
   }
+  // decimalDot: bei Messwerten wie Gewicht ist "86.154" ein Dezimalwert (Waage mit 3 Nachkommastellen), keine 86.154 kg
   t = t.replace(/[.,]$/, '');
   const n = Number(t);
   return Number.isFinite(n) ? n : undefined;
@@ -189,7 +190,7 @@ function parsePointMetric(metric: PointMetric, block: any, warnings: string[], t
   }
   const byDay = new Map<string, { v: number; iso: string; ms: number }[]>();
   values.forEach((raw, i) => {
-    let v = parseNumber(raw);
+    let v = parseNumber(raw, true);
     const d = parseDate(dates[i], tz);
     if (v === undefined || !d) {
       warnings.push(`${metric}: Zeile ${i + 1} nicht lesbar ("${raw}" / "${dates[i]}").`);
@@ -328,7 +329,7 @@ function parseSummed(metric: SummedMetric, unit: string, block: any, warnings: s
   if (!withSources) warnings.push(`${metric}: keine Quellen mitgeschickt, iPhone und Watch werden womöglich doppelt gezählt.`);
   const perDay = new Map<string, { bySource: Map<string, number>; lastIso: string; lastMs: number }>();
   values.forEach((raw, i) => {
-    const v = parseNumber(raw);
+    const v = parseNumber(raw, unit === 'km' || unit === 'kcal');
     const d = parseDate(dates[i], tz);
     if (v === undefined || !d || v < 0) {
       warnings.push(`${metric}: Zeile ${i + 1} nicht lesbar.`);

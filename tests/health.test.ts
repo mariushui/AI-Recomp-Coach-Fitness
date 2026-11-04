@@ -183,3 +183,18 @@ describe('weitere Kennzahlen aus dem Kurzbefehl', () => {
     expect(r.warnings).toEqual([]);
   });
 });
+
+describe('Zahlen von Kurzbefehle', () => {
+  it('Gewicht mit drei Nachkommastellen wird gespeichert', () => {
+    const r = parseHealthPayload({ metrics: { weight: { values: '86.154', dates: '04.11.2026, 07:10' } } });
+    expect(r.rows[0].data.value).toBe(86.2);
+    expect(r.warnings).toEqual([]);
+  });
+  it('Punkt mit drei Nachkommastellen ist ein Dezimaltrenner', () => {
+    expect(parseNumber('86.154', true)).toBe(86.154);
+    expect(parseNumber('64.624', true)).toBe(64.624);
+    expect(parseNumber('1.234.567', true)).toBe(1234567);
+    expect(parseNumber('12.345')).toBe(12345); // Schritte
+    expect(parseNumber('1.234,5')).toBe(1234.5);
+  });
+});
