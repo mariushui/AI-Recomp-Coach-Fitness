@@ -10,9 +10,10 @@ export interface Profile {
   fat_goal_g?: number | null;
   energy_mode?: EnergyMode | null; // Ziel-Modus
   kcal_adjust_pct?: number | null; // Abweichung vom Verbrauch in %, negativ = Defizit
+  max_hr?: number | null; // Maximalpuls in bpm, leer = Schätzung aus dem Alter
 }
 
-const COLUMNS = 'display_name, height_cm, protein_goal_g, kcal_goal, birth_date, carbs_goal_g, fat_goal_g, energy_mode, kcal_adjust_pct';
+const COLUMNS = 'display_name, height_cm, protein_goal_g, kcal_goal, birth_date, carbs_goal_g, fat_goal_g, energy_mode, kcal_adjust_pct, max_hr';
 
 export type EnergyMode = 'recomp' | 'abnehmen' | 'halten' | 'masse';
 
@@ -57,6 +58,68 @@ export const ENERGY_MODES: Record<EnergyMode, { label: string; pct: number; min:
     text: 'Leichter Überschuss für Muskelaufbau, Trainierte eher 5 bis 10 %. Größerer Überschuss bringt kaum mehr Muskeln, aber mehr Fett. Taille im Blick behalten.',
   },
 };
+
+/**
+ * Ernährungs-Empfehlung je Ziel-Modus. Abgeleitet aus den Spannen der Literatur (docs/literatur/studien.md):
+ * - Protein: Helms 2014 (Nr. 6) 2,3 bis 3,1 g je kg fettfreie Masse im Defizit, Iraki 2019 (Nr. 14) 1,6 bis 2,2 g je kg im Aufbau.
+ *   Je größer das Defizit, desto mehr Protein, im Aufbau reicht weniger.
+ * - Fett: Helms 15 bis 30 % der Kalorien. Im Defizit und Aufbau 25 %, damit Kohlenhydrate fürs Training übrig bleiben.
+ * Ohne Modus gelten die Werte von „Gewicht halten“ (2 g je kg, Fett 30 %), wie bisher.
+ */
+export const MODE_NUTRITION: Record<EnergyMode, { proteinPerKg: number; fatPct: number }> = {
+  abnehmen: { proteinPerKg: 2.4, fatPct: 25 },
+  recomp: { proteinPerKg: 2.2, fatPct: 28 },
+  halten: { proteinPerKg: 2, fatPct: 30 },
+  masse: { proteinPerKg: 1.8, fatPct: 25 },
+};
+
+export interface ModeGoals {
+  protein?: number;
+  kcal?: number;
+  carbs?: number;
+  fat?: number;
+  proteinPerKg: number;
+  fatPct: number;
+  pct: number;
+}
+
+/** Alle Tagesziele für den gewählten Modus. basisKg = Muskel- oder fettfreie Masse, burnKcal = Verbrauch ohne Anpassung. */
+export function modeGoals(p: Pick<Profile, 'energy_mode' | 'kcal_adjust_pct'>, basisKg: number | undefined, burnKcal: number | undefined): ModeGoals {
+  const m = MODE_NUTRITION[p.energy_mode ?? 'halten'];
+  const pct = adjustPct(p);
+  const protein = basisKg && basisKg >= 20 ? Math.round((basisKg * m.proteinPerKg) / 5) * 5 : undefined;
+  const kcal = burnKcal ? Math.round((burnKcal * (1 + pct / 100)) / 50) * 50 : undefined;
+  const macros = suggestedMacroGoals(kcal, protein, m.fatPct);
+  return { protein, kcal, carbs: macros?.carbs, fat: macros?.fat, proteinPerKg: m.proteinPerKg, fatPct: m.fatPct, pct };
+}
+
+/** Maximalpuls: eingetragener Wert, sonst Schätzung nach Tanaka, Monahan, Seals 2001 (208 minus 0,7 x Alter). */
+export function maxHeartRate(maxHr: number | null | undefined, age: number | undefined): { value: number; estimated: boolean } | undefined {
+  if (maxHr) return { value: maxHr, estimated: false };
+  if (age === undefined || age < 10 || age > 100) return undefined;
+  return { value: Math.round(208 - 0.7 * age), estimated: true };
+}
+
+/** Belastungszonen in Prozent des Maximalpulses. Zone 2 ist die lockere Ausdauer, bei der man noch sprechen kann. */
+export const HR_ZONES = [
+  { zone: 1, name: 'Erholung', from: 0.5, to: 0.6 },
+  { zone: 2, name: 'Grundlage, Zone 2', from: 0.6, to: 0.7 },
+  { zone: 3, name: 'Tempo', from: 0.7, to: 0.8 },
+  { zone: 4, name: 'Schwelle', from: 0.8, to: 0.9 },
+  { zone: 5, name: 'Maximal', from: 0.9, to: 1 },
+] as const;
+
+export function hrZoneRanges(maxHr: number): { zone: number; name: string; lo: number; hi: number }[] {
+  return HR_ZONES.map((z) => ({ zone: z.zone, name: z.name, lo: Math.round(maxHr * z.from), hi: Math.round(maxHr * z.to) }));
+}
+
+/** Zone eines Durchschnittspulses. Unter 50 % des Maximalpulses: keine Zone. */
+export function hrZoneOf(avgHr: number | undefined, maxHr: number | undefined): number | undefined {
+  if (!avgHr || !maxHr) return undefined;
+  const r = avgHr / maxHr;
+  if (r < 0.5) return undefined;
+  return HR_ZONES.find((z) => r < z.to)?.zone ?? 5;
+}
 
 /** Gewählte Anpassung in Prozent: eigener Wert, sonst Standard des Modus, sonst 0. */
 export function adjustPct(p: Pick<Profile, 'energy_mode' | 'kcal_adjust_pct'>): number {
@@ -111,11 +174,11 @@ export function suggestedKcalGoal(leanMassKg: number | undefined, avgActiveKcal:
 
 /**
  * Vorschlag für Fett und Kohlenhydrate aus Kalorien- und Protein-Ziel:
- * Fett 30 % der Kalorien (9 kcal je g), der Rest Kohlenhydrate (4 kcal je g). Auf 5 g gerundet.
+ * Fett als Anteil der Kalorien (9 kcal je g, Standard 30 %), der Rest Kohlenhydrate (4 kcal je g). Auf 5 g gerundet.
  */
-export function suggestedMacroGoals(kcalGoal: number | undefined, proteinGoal: number | undefined): { carbs: number; fat: number } | undefined {
+export function suggestedMacroGoals(kcalGoal: number | undefined, proteinGoal: number | undefined, fatPct = 30): { carbs: number; fat: number } | undefined {
   if (!kcalGoal || !proteinGoal) return undefined;
-  const fat = Math.round((kcalGoal * 0.3) / 9 / 5) * 5;
+  const fat = Math.round((kcalGoal * (fatPct / 100)) / 9 / 5) * 5;
   const carbs = Math.max(20, Math.round((kcalGoal - proteinGoal * 4 - fat * 9) / 4 / 5) * 5);
   return { carbs, fat };
 }

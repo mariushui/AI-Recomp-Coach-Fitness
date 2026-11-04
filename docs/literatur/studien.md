@@ -350,3 +350,5 @@ Jede Arbeit wurde per Websuche über PubMed, PMC, Verlagsseiten oder Bibliotheks
 - **Pedersen et al. zu dehnungsvermittelter Hypertrophie:** Keine passende Arbeit gefunden. Vermutlich eine Verwechslung mit Pedrosa et al. 2022 (Nr. 20b). Nicht aufgenommen.
 - **Norton, 2,2 g/kg Protein:** Siehe `huberman.md`, H4. Keiner Quelle sicher zugeordnet.
 - **Konkrete RP-Satzzahlen pro Muskel (MEV, MAV, MRV):** Nicht am Buch geprüft, daher nicht aufgenommen.
+- **Tanaka, Monahan, Seals 2001, Maximalpuls = 208 − 0,7 × Alter:** Aus dem Gedächtnis übernommen (J Am Coll Cardiol 2001;37:153-156), nicht nachgeschlagen. Die App nutzt es nur als Schätzung, solange kein Maximalpuls eingetragen ist.
+- **Protein und Fett je Ziel-Modus (`MODE_NUTRITION` in `lib/profile.ts`):** Die Werte (Protein 1,8 bis 2,4 g je kg, Fett 25 bis 30 %) sind aus den Spannen von Helms 2014 (Nr. 6) und Iraki 2019 (Nr. 14) abgeleitet, keine Studie nennt sie so. Für Body Recomposition gibt es keine eigene Quelle.

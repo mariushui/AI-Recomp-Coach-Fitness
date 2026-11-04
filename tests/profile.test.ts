@@ -48,3 +48,47 @@ describe('Ziel-Modus', () => {
     expect(adjustPct({})).toBe(0);
   });
 });
+
+describe('Empfehlung je Ziel-Modus', () => {
+  it('Protein, Fett und Kohlenhydrate folgen dem Modus', async () => {
+    const { modeGoals } = await import('../lib/profile');
+    // 67,5 kg Magermasse, Verbrauch 2900 kcal
+    const re = modeGoals({ energy_mode: 'recomp' }, 67.5, 2900);
+    expect(re).toMatchObject({ protein: 150, kcal: 2600, proteinPerKg: 2.2, fatPct: 28, pct: -10 });
+    expect(re.fat).toBe(80); // 28 % von 2600 kcal = 728 kcal = 81 g, auf 5 gerundet
+    expect(re.carbs).toBe(320); // (2600 - 600 kcal Protein - 720 kcal Fett) / 4
+    const ab = modeGoals({ energy_mode: 'abnehmen' }, 67.5, 2900);
+    expect(ab).toMatchObject({ protein: 160, kcal: 2300, pct: -20 });
+    expect(ab.protein!).toBeGreaterThan(re.protein!);
+    const ma = modeGoals({ energy_mode: 'masse' }, 67.5, 2900);
+    expect(ma).toMatchObject({ protein: 120, kcal: 3200 });
+    expect(ma.protein!).toBeLessThan(re.protein!);
+  });
+  it('ohne Modus wie bisher: 2 g je kg, Fett 30 %, keine Anpassung', async () => {
+    const { modeGoals } = await import('../lib/profile');
+    expect(modeGoals({}, 67.2, 2900)).toMatchObject({ protein: 135, kcal: 2900, fatPct: 30, pct: 0 });
+  });
+  it('ohne Masse und Verbrauch keine Zahlen', async () => {
+    const { modeGoals } = await import('../lib/profile');
+    expect(modeGoals({ energy_mode: 'recomp' }, undefined, undefined)).toMatchObject({ protein: undefined, kcal: undefined, carbs: undefined, fat: undefined });
+  });
+});
+
+describe('Maximalpuls und Zonen', () => {
+  it('eingetragener Wert vor Schätzung, Schätzung nach Tanaka', async () => {
+    const { maxHeartRate } = await import('../lib/profile');
+    expect(maxHeartRate(190, 45)).toEqual({ value: 190, estimated: false });
+    expect(maxHeartRate(null, 45)).toEqual({ value: 177, estimated: true }); // 208 - 31,5 = 176,5
+    expect(maxHeartRate(null, undefined)).toBeUndefined();
+  });
+  it('Zonen als Bereiche und Zone eines Durchschnittspulses', async () => {
+    const { hrZoneRanges, hrZoneOf } = await import('../lib/profile');
+    const z = hrZoneRanges(180);
+    expect(z[1]).toEqual({ zone: 2, name: 'Grundlage, Zone 2', lo: 108, hi: 126 });
+    expect(hrZoneOf(120, 180)).toBe(2);
+    expect(hrZoneOf(150, 180)).toBe(4);
+    expect(hrZoneOf(175, 180)).toBe(5);
+    expect(hrZoneOf(80, 180)).toBeUndefined();
+    expect(hrZoneOf(undefined, 180)).toBeUndefined();
+  });
+});

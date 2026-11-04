@@ -202,6 +202,12 @@ export function recoveryLabel(score: number | undefined): { text: string; color:
   return { text: 'wenig erholt, locker', color: '#FF375F' };
 }
 
+/** Farbe der Belastung eines Tages, gleich im Ring-Kalender von Verlauf und Kalender. */
+export function strainColor(strain: number | undefined): string {
+  const l = strainLabel(strain);
+  return l === 'leicht' ? '#38BDF8' : l === 'moderat' ? '#FBBF24' : l === 'hoch' ? '#FF6B00' : l === 'sehr hoch' ? '#FF375F' : '#475569';
+}
+
 export function strainLabel(strain: number | undefined): string {
   if (strain === undefined || strain === 0) return 'keine Belastung';
   if (strain < 3) return 'leicht';

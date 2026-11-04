@@ -77,3 +77,11 @@ export const fmtMicro = (key: MicroKey, v: number | undefined) => {
   const digits = v < 1 ? 2 : v < 10 ? 1 : 0;
   return `${v.toLocaleString('de-DE', { maximumFractionDigits: digits })} ${def.unit}`;
 };
+
+/** Ø der Mikronährstoffe über die 7 Tage bis einschließlich day (Tage mit Schätzung). */
+export function microsWeekAverage(byDay: Map<string, MicroDay>, day: string): { micros: Micros; days: number } {
+  const from = new Date(day + 'T12:00:00');
+  from.setDate(from.getDate() - 7);
+  const fromKey = dayKey(from);
+  return averageMicros([...byDay.values()].filter((d) => d.day <= day && d.day > fromKey));
+}
