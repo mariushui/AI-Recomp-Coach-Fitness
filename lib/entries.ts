@@ -23,6 +23,18 @@ export async function listEntries(from: Date, to: Date): Promise<Entry[]> {
   return out;
 }
 
+/** Nur was die Kraft-Seite braucht: Krafteinheiten und Körpergewicht. Klein genug für jeden App-Start. */
+export async function listStrengthHistory(days = 400): Promise<Entry[]> {
+  const from = addDays(new Date(), -days).toISOString();
+  const [w, b, h] = await Promise.all([
+    supabase.from('entries').select('*').eq('kind', 'workout').eq('data->>sport', 'kraft').gte('occurred_at', from).order('occurred_at'),
+    supabase.from('entries').select('*').eq('kind', 'body').not('data->weight_kg', 'is', null).gte('occurred_at', from).order('occurred_at'),
+    supabase.from('entries').select('*').eq('kind', 'health').eq('data->>metric', 'weight').gte('occurred_at', from).order('occurred_at'),
+  ]);
+  for (const r of [w, b, h]) if (r.error) throw r.error;
+  return [...(w.data ?? []), ...(b.data ?? []), ...(h.data ?? [])] as Entry[];
+}
+
 export async function listAllEntries(): Promise<Entry[]> {
   return listEntries(new Date('2000-01-01'), new Date('2100-01-01'));
 }
@@ -31,7 +43,9 @@ export async function insertEntries(entries: NewEntry[]): Promise<void> {
   if (entries.length === 0) return;
   const rest: NewEntry[] = [];
   for (const e of entries) {
-    if (e.kind === 'workout' && !e.external_id && (await mergeIntoAppleWorkout(e as NewEntry<'workout'>))) continue;
+    // Kraft aus der Eingabe hat eine eigene external_id (gegen doppeltes Speichern), darf aber trotzdem mit Apple zusammengehen
+    const mergeable = !e.external_id || e.external_id.startsWith('kraft:');
+    if (e.kind === 'workout' && mergeable && (await mergeIntoAppleWorkout(e as NewEntry<'workout'>))) continue;
     rest.push(e);
   }
   const withExternal = rest.filter((e) => e.external_id);
@@ -63,7 +77,8 @@ async function mergeIntoAppleWorkout(e: NewEntry<'workout'>): Promise<boolean> {
     .eq('source', 'health')
     .gte('occurred_at', addDays(day, -1).toISOString())
     .lt('occurred_at', addDays(day, 2).toISOString());
-  if (error || !data) return false;
+  if (error) throw error; // ohne Netz nicht still weitermachen, sonst landet nichts in der Warteschlange
+  if (!data) return false;
   const key = dayKey(e.occurred_at);
   const apple = data.find((a) => dayKey(a.occurred_at) === key && sameSport(e.data, a.data as WorkoutData));
   if (!apple) return false;

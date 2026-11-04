@@ -7,31 +7,85 @@ import CalendarView from './components/CalendarView';
 import Settings from './components/Settings';
 import { Card } from './components/ui';
 import { Icons } from './components/icons';
+import { insertEntries, listStrengthHistory } from './lib/entries';
+import { cacheHistory } from './lib/strengthTemplates';
+import { flush, queuedCount } from './lib/offlineQueue';
 
-const Trends = lazy(() => import('./components/Trends'));
+const loadTrends = () => import('./components/Trends');
+const loadStrength = () => import('./components/StrengthView');
+const Trends = lazy(loadTrends);
+const StrengthView = lazy(loadStrength);
 
-type Tab = 'log' | 'calendar' | 'trends' | 'settings';
+type Tab = 'log' | 'strength' | 'calendar' | 'trends' | 'settings';
 
 const TABS: { id: Tab; label: string; icon: (typeof Icons)['Plus'] }[] = [
   { id: 'log', label: 'Erfassen', icon: Icons.Plus },
+  { id: 'strength', label: 'Kraft', icon: Icons.Barbell },
   { id: 'calendar', label: 'Kalender', icon: Icons.Calendar },
   { id: 'trends', label: 'Verlauf', icon: Icons.Chart },
   { id: 'settings', label: 'Einstellungen', icon: Icons.Gear },
 ];
+
+/** Zuletzt gespeicherte Sitzung aus dem Browser, für den Start ohne Netz. */
+function storedSession(): Session | null {
+  try {
+    const key = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    const raw = key ? localStorage.getItem(key) : null;
+    const s = raw ? JSON.parse(raw) : null;
+    return s?.user ? (s as Session) : null;
+  } catch {
+    return null;
+  }
+}
 
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>('log');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [waiting, setWaiting] = useState(() => queuedCount());
+
+  // Offline gespeicherte Einträge senden: beim Start und sobald wieder Netz da ist
+  useEffect(() => {
+    if (!session) return;
+    const send = () =>
+      flush(insertEntries)
+        .then((n) => {
+          setWaiting(queuedCount());
+          if (n > 0) setRefreshKey((k) => k + 1);
+        })
+        // Schattenwerte fürs Krafttraining auf dem Gerät auffrischen, falls es später in den Keller geht
+        .then(() => listStrengthHistory())
+        .then(cacheHistory)
+        .catch(() => undefined);
+    send();
+    window.addEventListener('online', send);
+    // Seiten mit Diagrammen vorab laden, damit sie der Service Worker auch für den Keller im Speicher hat
+    const t = setTimeout(() => {
+      loadStrength().catch(() => undefined);
+      loadTrends().catch(() => undefined);
+    }, 3000);
+    return () => {
+      window.removeEventListener('online', send);
+      clearTimeout(t);
+    };
+  }, [session]);
 
   useEffect(() => {
     if (!isConfigured) return setReady(true);
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setReady(true);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        // Ohne Netz kann das Token nicht erneuert werden. Dann mit der gespeicherten Sitzung weiterarbeiten,
+        // Einträge landen in der Warteschlange und gehen später raus.
+        setSession(data.session ?? storedSession());
+        setReady(true);
+      })
+      .catch(() => {
+        setSession(storedSession());
+        setReady(true);
+      });
+    const { data } = supabase.auth.onAuthStateChange((e, s) => setSession(s ?? (e === 'SIGNED_OUT' ? null : storedSession())));
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -50,7 +104,10 @@ function App() {
   if (!ready) return null;
   if (!session) return <AuthScreen />;
 
-  const bump = () => setRefreshKey((k) => k + 1);
+  const bump = () => {
+    setRefreshKey((k) => k + 1);
+    setWaiting(queuedCount());
+  };
 
   return (
     <div className="min-h-screen pb-24">
@@ -58,10 +115,16 @@ function App() {
         <h1 className="font-display text-lg font-bold">
           Recomp <span className="text-cyber-green">Coach</span>
         </h1>
+        {waiting > 0 && <p className="text-[11px] text-amber-300 mt-0.5">{waiting} {waiting === 1 ? 'Eintrag wartet' : 'Einträge warten'} auf Netz</p>}
       </header>
 
       <main className="max-w-xl mx-auto px-4 pt-4">
         {tab === 'log' && <QuickLog onSaved={bump} refreshKey={refreshKey} />}
+        {tab === 'strength' && (
+          <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
+            <StrengthView refreshKey={refreshKey} onSaved={bump} />
+          </Suspense>
+        )}
         {tab === 'calendar' && <CalendarView refreshKey={refreshKey} onChanged={bump} />}
         {tab === 'trends' && (
           <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
@@ -72,12 +135,12 @@ function App() {
       </main>
 
       <nav className="fixed bottom-0 inset-x-0 z-10 bg-cyber-gray/95 backdrop-blur border-t border-white/5 pb-[env(safe-area-inset-bottom)]">
-        <div className="max-w-xl mx-auto grid grid-cols-4">
+        <div className="max-w-xl mx-auto grid grid-cols-5">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`py-3 text-xs font-bold ${tab === t.id ? 'text-cyber-green' : 'text-slate-500'}`}
+              className={`py-3 text-[11px] font-bold ${tab === t.id ? 'text-cyber-green' : 'text-slate-500'}`}
             >
               <t.icon size={24} weight="regular" className="mx-auto mb-1" aria-hidden />
               {t.label}

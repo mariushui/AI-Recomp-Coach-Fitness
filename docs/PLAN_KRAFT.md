@@ -28,6 +28,10 @@ Startliste mit ca. 40 Übungen, je Übung Muster (horizontal drücken, vertikal 
 - Geschätztes 1RM je Hauptübung (Epley: Gewicht x (1 + Wdh./30))
 - Bestwerte (PR) markiert
 
-## Offene Entscheidungen
+## Umsetzung (Stand 4. November 2026)
 
-Siehe Nachricht im Chat vom 4. November 2026.
+- Tab „Kraft“: Training starten (Vorlagen Pull, Push, Beine oder frei), Wochenvolumen je Einheitsart (auswählbar), harte Sätze je Muskelgruppe (diese Woche und Ø der 4 Wochen davor), Verlauf je Übung (Volumen und e1RM), Trainingshistorie mit Veränderung zur letzten Einheit derselben Art.
+- Eingabe: Schatten = letzte Einheit mit dieser Übung, sonst Vorlage. Leere Felder übernehmen den Schatten. Gespeichert werden nur abgehakte Sätze, Tippen hakt automatisch ab. Entwurf liegt bei jedem Tastendruck im Gerätespeicher.
+- Ohne Netz: Service Worker (`public/sw.js`) hält App, Tailwind und Schriften. Sitzung wird aus dem Gerät gelesen. Speichern geht in die Warteschlange (`lib/offlineQueue.ts`) und wird beim nächsten Online-Moment gesendet. Schattenwerte werden bei jedem App-Start lokal aufgefrischt.
+- Vorlagen und eigene Übungen liegen vorerst nur im Gerät (localStorage). Sync über Supabase ist ein späterer Schritt.
+- Bestwerte (PR) markieren: noch offen.
