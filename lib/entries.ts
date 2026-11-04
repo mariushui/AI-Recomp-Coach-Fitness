@@ -105,9 +105,9 @@ export async function deleteEntry(id: string): Promise<void> {
 }
 
 /** Zerlegt Text und optional ein Essensfoto per KI in Einträge. Speichert nichts. */
-export async function parseText(text: string, image?: ImageInput | null): Promise<ParseResult> {
+export async function parseText(text: string, image?: ImageInput | null, now?: string): Promise<ParseResult> {
   const { data, error } = await supabase.functions.invoke('parse-log', {
-    body: { text, now: localIso(), tz: timeZone(), ...(image ? { image } : {}) },
+    body: { text, now: now ?? localIso(), tz: timeZone(), ...(image ? { image } : {}) },
   });
   if (error) {
     let msg = error.message;

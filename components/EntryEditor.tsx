@@ -1,4 +1,4 @@
-import { sumMicros } from '../lib/micros';
+import { applyRecalc, recalcText } from '../lib/nutritionRecalc';
 import React, { useState } from 'react';
 import {
   KIND_LABEL,
@@ -34,39 +34,33 @@ interface Props {
   hideTime?: boolean; // im Wochenplan: Tag und Uhrzeit stehen außerhalb
   header?: React.ReactNode; // ersetzt die Zeitangabe im Kopf
   extra?: React.ReactNode; // zusätzliche Felder oben im aufgeklappten Bereich
+  onRecalcBackground?: (text: string) => void; // gespeicherte Mahlzeit: im Hintergrund neu berechnen
 }
 
-const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false, hideTime = false, header, extra }) => {
+const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen = false, hideTime = false, header, extra, onRecalcBackground }) => {
   const [open, setOpen] = useState(defaultOpen);
   const [recalc, setRecalc] = useState<'idle' | 'busy' | 'error' | 'done'>('idle');
   const [recalcMsg, setRecalcMsg] = useState('');
   const d = draft.data ?? {};
 
-  /** Nährwerte aus Beschreibung und Zutaten neu schätzen lassen. Zeit, Mahlzeit und Text bleiben, wie sie sind. */
+  /**
+   * Nährwerte aus Beschreibung und Zutaten neu schätzen lassen. Zeit, Mahlzeit und Text bleiben, wie sie sind.
+   * Bei gespeicherten Mahlzeiten übernimmt das der Hintergrund (onRecalcBackground), das Fenster schließt sofort.
+   */
   const recalcNutrition = async () => {
-    const items = Array.isArray(d.items) ? d.items.map((i: any) => (i.amount ? `${i.amount} ${i.name}` : i.name)).join(', ') : '';
-    const text = [d.description, items && `Zutaten: ${items}`].filter(Boolean).join('. ');
-    if (!text.trim()) {
+    const text = recalcText(d);
+    if (!text) {
       setRecalc('error');
       setRecalcMsg('Erst bei „Was“ eintragen, was du gegessen hast.');
       return;
     }
+    if (onRecalcBackground) return onRecalcBackground(text);
     setRecalc('busy');
     try {
-      const r = await parseText(`Nur Nährwerte schätzen, eine Mahlzeit: ${text}`);
+      const r = await parseText(text);
       const meals = r.entries.filter((e) => e.kind === 'meal').map((e) => e.data as any);
       if (meals.length === 0) throw new Error('Keine Nährwerte erkannt.');
-      const sum = (k: string) => {
-        const v = meals.map((m) => m[k]).filter((x) => typeof x === 'number');
-        return v.length ? Math.round(v.reduce((a: number, b: number) => a + b, 0)) : undefined;
-      };
-      const next: any = { ...d, protein_g: sum('protein_g'), kcal: sum('kcal'), carbs_g: sum('carbs_g'), fat_g: sum('fat_g') };
-      const newItems = meals.flatMap((m) => m.items ?? []);
-      if (newItems.length && !d.items?.length) next.items = newItems;
-      next.confidence = meals[0].confidence;
-      next.micros = sumMicros(meals.map((m) => m.micros));
-      for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
-      onChange({ ...draft, data: next });
+      onChange({ ...draft, data: applyRecalc(d, meals) });
       setRecalc('done');
       setRecalcMsg('');
     } catch (e) {

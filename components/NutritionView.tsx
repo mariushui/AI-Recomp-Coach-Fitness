@@ -13,6 +13,7 @@ import { MACRO_COLOR } from '../lib/today';
 import { addDays, dayKey, formatTime, startOfDay } from '../lib/time';
 import { MacroRow } from './TodayBar';
 import EntryEditor, { type Draft } from './EntryEditor';
+import { addRecalcJob } from '../lib/backgroundJobs';
 import { Button, Card, ErrorBox } from './ui';
 import { Icons } from './icons';
 
@@ -134,7 +135,19 @@ const NutritionView: React.FC<{ refreshKey: number; onChanged: () => void }> = (
             if (editId === m.id && draft)
               return (
                 <div key={m.id} className="space-y-2 py-2">
-                  <EntryEditor draft={draft} onChange={setDraft} defaultOpen />
+                  <EntryEditor
+                    draft={draft}
+                    onChange={setDraft}
+                    defaultOpen
+                    onRecalcBackground={(text) =>
+                      run(async () => {
+                        // Erst speichern, was im Fenster geändert wurde, dann rechnet der Hintergrund
+                        const data = normalizeData(draft.kind, draft.data);
+                        if (data) await updateEntry(m.id, { occurred_at: draft.occurred_at, data });
+                        addRecalcJob(m.id, text, (md.description || 'Mahlzeit').slice(0, 30));
+                      })
+                    }
+                  />
                   <div className="flex gap-2">
                     <Button variant="green" className="flex-1" onClick={save}>
                       Speichern
@@ -185,7 +198,7 @@ const NutritionView: React.FC<{ refreshKey: number; onChanged: () => void }> = (
                 <th className="text-left font-bold pb-1">Nährstoff</th>
                 <th className="text-right font-bold pb-1">{isToday ? 'Heute' : 'Tag'}</th>
                 <th className="pb-1 w-20"></th>
-                <th className="text-right font-bold pb-1">Ø 7 Tage</th>
+                <th className="text-right font-bold pb-1 whitespace-nowrap">Ø 7 Tage</th>
               </tr>
             </thead>
             <tbody>

@@ -11,6 +11,7 @@ import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, fromSlot, isVirtual, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
 import EntryEditor, { type Draft } from './EntryEditor';
+import { addRecalcJob } from '../lib/backgroundJobs';
 import SwipeToDelete from './SwipeToDelete';
 import TrainingPlanView from './TrainingPlanView';
 import { Button, Card, ErrorBox } from './ui';
@@ -171,7 +172,26 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
 
   const editorBlock = (
     <div className="space-y-2">
-      {draft && <EntryEditor draft={draft} onChange={setDraft} defaultOpen />}
+      {draft && (
+        <EntryEditor
+          draft={draft}
+          onChange={setDraft}
+          defaultOpen
+          onRecalcBackground={
+            editId && editId !== 'new' && editing && !isVirtual(editing) && draft.kind === 'meal'
+              ? (text) =>
+                  run(async () => {
+                    // Erst speichern, was im Fenster geändert wurde, dann rechnet der Hintergrund
+                    const data = normalizeData(draft.kind, draft.data);
+                    if (data) await updateEntry(editId, { occurred_at: draft.occurred_at, data });
+                    addRecalcJob(editId, text, (draft.data?.description ?? 'Mahlzeit').slice(0, 30));
+                    setEditId(null);
+                    setDraft(null);
+                  })
+              : undefined
+          }
+        />
+      )}
       <div className="flex gap-2">
         <Button variant="green" className="flex-1" onClick={saveDraft}>
           Speichern
