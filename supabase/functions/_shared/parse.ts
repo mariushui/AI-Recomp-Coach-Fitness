@@ -142,7 +142,7 @@ Regeln:
 - Ergänzungsmittel (Kreatin, Whey ohne Mahlzeit, Vitamin D, Omega-3, Magnesium, Elektrolyte): meal mit meal_type "ergaenzung", items mit Name und Menge (z. B. "Kreatin", "5 g"), description = Aufzählung. Makros nur, wenn nennenswert (Whey: Protein und kcal).
 - Jedes genannte Lebensmittel und Getränk mit Kalorien landet in einem meal. Nichts davon weglassen. Mehrere Dinge zu verschiedenen Zeiten = mehrere meals.
 - Mahlzeiten: Zutaten mit Menge auflisten. Protein, kcal, Kohlenhydrate und Fett realistisch schätzen. Protein ist am wichtigsten. confidence = low, wenn Mengen fehlen.
-- micros: Mikronährstoffe der ganzen Mahlzeit nach üblichen Nährwerttabellen schätzen (BLS, USDA), Einheit steht im Schlüssel (_g, _mg, _ug = Mikrogramm). Nur Nährstoffe, die in den Zutaten nennenswert vorkommen. Unbekanntes weglassen, nie 0 raten. Ergänzungsmittel: Dosis laut Angabe (Vitamin D 1000 IE = 25 ug, 1 Omega-3-Kapsel nur mit genannter Menge EPA und DHA).
+${MICRO_RULE}
 - Training: sport aus der Liste wählen, sonst "sonstiges" mit sport_label. Bei Tennis und Capoeira focus, high und low erfassen, wenn genannt. Bei Kraft jede Übung mit Sätzen, Wiederholungen, Gewicht in kg. Bei Laufen Distanz und Pace.
 - plan gibt es nur für Trainingseinheiten. Essen ist immer meal, auch bei "gleich", "als Nächstes" oder "später" (dann occurred_at entsprechend später).
 - Vorhaben sind plan, nicht workout: alles in der Zukunft oder mit "will", "plane", "vorgenommen", "morgen", "nächste Woche", "am Donnerstag".
@@ -157,6 +157,23 @@ Regeln:
   confidence höchstens medium, low bei verdeckten Zutaten oder unklaren Mengen. Text zum Foto hat Vorrang vor deiner Schätzung (z. B. "250 g Reis").
   Ohne Zeitangabe im Text: occurred_at = jetzt. Ist kein Essen zu sehen, keine Einträge und eine kurze Rückfrage.
 - Antworte auf Deutsch.`;
+}
+
+// Regel für Mikronährstoffe, gleich im vollen und im kurzen Prompt
+const MICRO_RULE = `- micros: Mikronährstoffe der ganzen Mahlzeit nach üblichen Nährwerttabellen schätzen (BLS, USDA), Einheit steht im Schlüssel (_g, _mg, _ug = Mikrogramm). Nur Nährstoffe, die in den Zutaten nennenswert vorkommen. Unbekanntes weglassen, nie 0 raten. Ergänzungsmittel: Dosis laut Angabe (Vitamin D 1000 IE = 25 ug, 1 Omega-3-Kapsel nur mit genannter Menge EPA und DHA).`;
+
+/**
+ * Kurzer Prompt nur für „Nährwerte neu berechnen“: eine Mahlzeit, nur Nährwerte. Weniger Text für die KI, schnellere Antwort.
+ * Alle anderen Eingaben laufen weiter über buildSystemPrompt().
+ */
+export function buildNutritionPrompt(): string {
+  return `Du schätzt die Nährwerte genau einer Mahlzeit.
+Antworte nur mit JSON in dieser Form, ohne Erklärung:
+{"entries":[{"kind":"meal","occurred_at":"<Zeitpunkt aus dem Kontext>","meal":{"description":"...","items":[{"name":"...","amount":"..."}],"protein_g":0,"kcal":0,"carbs_g":0,"fat_g":0,"confidence":"low|medium|high","micros":{${MICROS.map((m) => `"${m.key}":0`).join(',')}}}}],"questions":[]}
+Regeln:
+- Protein, kcal, Kohlenhydrate und Fett realistisch aus Zutaten und Mengen schätzen. Öl, Butter und Soßen mitrechnen. confidence = low, wenn Mengen fehlen.
+${MICRO_RULE}
+- Zahlen als Zahlen, keine Einheiten im Wert. Felder ohne Wert weglassen. Antworte auf Deutsch.`;
 }
 
 /** Beschreibung des JSON-Formats für Modelle, die ohne responseSchema laufen. Gleiche Felder wie RESPONSE_SCHEMA. */

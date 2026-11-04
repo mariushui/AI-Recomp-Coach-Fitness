@@ -40,3 +40,13 @@ describe('Mikronährstoffe', () => {
     expect(buildFormatHint()).toContain('vitamin_d_ug');
   });
 });
+
+describe('Kurzer Prompt für die Neuberechnung', () => {
+  it('nennt alle Mikro-Schlüssel und ist deutlich kürzer als der volle Prompt', async () => {
+    const { buildNutritionPrompt, buildSystemPrompt, buildFormatHint } = await import('../supabase/functions/_shared/parse');
+    const p = buildNutritionPrompt();
+    expect(p).toContain('omega3_g');
+    expect(p).toContain('Ergänzungsmittel');
+    expect(p.length).toBeLessThan((buildSystemPrompt() + buildFormatHint()).length / 2);
+  });
+});

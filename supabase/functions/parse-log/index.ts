@@ -1,5 +1,5 @@
 // POST /functions/v1/parse-log
-// Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone, image?: { mime, data (Base64) } }
+// Body: { text: string, now: ISO-String mit Offset, tz: IANA-Zeitzone, image?: { mime, data (Base64) }, mode?: 'nutrition' }
 // Mit image wertet die KI ein Essensfoto aus. Das Foto wird nicht gespeichert.
 // Antwort: { entries: ParsedEntry[], questions: string[], model, schema }
 // Diagnose (nur angemeldet): GET ?models=1 listet Modelle; ?model=NAME erzwingt eins; ?schema=0|1 schaltet das Antwortschema.
@@ -8,7 +8,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/http.ts';
-import { RESPONSE_SCHEMA, buildFormatHint, buildSystemPrompt, buildUserPrompt, normalizeParseResult } from '../_shared/parse.ts';
+import { RESPONSE_SCHEMA, buildFormatHint, buildNutritionPrompt, buildSystemPrompt, buildUserPrompt, normalizeParseResult } from '../_shared/parse.ts';
 import { checkImage, type ImageInput } from '../_shared/image.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') ?? '';
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     return json({ configured: GEMINI_MODELS, configuredImage: GEMINI_MODELS_IMAGE, available: models });
   }
 
-  let body: { text?: string; now?: string; tz?: string; image?: unknown };
+  let body: { text?: string; now?: string; tz?: string; image?: unknown; mode?: string };
   try {
     body = await req.json();
   } catch {
@@ -87,7 +87,10 @@ Deno.serve(async (req) => {
   const schemaParam = new URL(req.url).searchParams.get('schema');
   const useSchema = schemaParam === null ? USE_SCHEMA_DEFAULT : schemaParam === '1';
   const payload = JSON.stringify({
-    systemInstruction: { parts: [{ text: buildSystemPrompt() + (useSchema ? '' : '\n\n' + buildFormatHint()) }] },
+    // mode=nutrition: nur Nährwerte einer Mahlzeit (Neuberechnung), kurzer Prompt mit eigenem Format
+    systemInstruction: {
+      parts: [{ text: body.mode === 'nutrition' && !image ? buildNutritionPrompt() : buildSystemPrompt() + (useSchema ? '' : '\n\n' + buildFormatHint()) }],
+    },
     contents: [
       {
         role: 'user',
@@ -141,7 +144,7 @@ interface Outcome {
 }
 
 /**
- * Fragt die Modelle der Reihe nach an. Antwortet eins nach HEDGE_MS noch nicht, startet parallel das nächste.
+ * Fragt die ersten zwei Modelle gleichzeitig an, danach der Reihe nach. Antwortet eins nach HEDGE_MS noch nicht, startet parallel das nächste.
  * Die erste brauchbare Antwort gewinnt, alle anderen Anfragen werden abgebrochen.
  * 404, 429 und 503 gelten als "nächstes Modell", andere Fehler brechen sofort ab (fatal).
  */
@@ -207,6 +210,8 @@ function callWithHedging(models: string[], payload: string): Promise<Outcome> {
         });
     };
     timers.push(setTimeout(() => finish({ lastStatus }), TOTAL_BUDGET_MS));
+    // Zwei Modelle gleich zu Beginn: Ist eins überlastet, antwortet das andere, ohne 6 s Wartezeit
     startNext();
+    if (models.length > 1) startNext();
   });
 }

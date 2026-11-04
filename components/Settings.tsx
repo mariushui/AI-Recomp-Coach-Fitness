@@ -7,7 +7,8 @@ import { average, dailyStats } from '../lib/stats';
 import { addDays } from '../lib/time';
 import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
-import { CHARTS, loadCharts, saveCharts } from '../lib/chartPrefs';
+import { CHART_LABEL, loadCharts, loadOrder, normalizeOrder, saveCharts, saveOrder } from '../lib/chartPrefs';
+import SortableList from './SortableList';
 import { MEASURE_OFF_KEY } from './MeasureReminder';
 import { Button, Card, ErrorBox, Label, NumberField, TextField } from './ui';
 
@@ -34,6 +35,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
   const [birthDate, setBirthDate] = useState<string | undefined>();
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
+  const [order, setOrder] = useState(loadOrder);
   const [measureReminder, setMeasureReminder] = useState(() => {
     try {
       return localStorage.getItem(MEASURE_OFF_KEY) !== '1';
@@ -233,25 +235,32 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       </Section>
 
       <Section title="Verlauf">
-        <p className="text-sm text-slate-400">Welche Diagramme der Verlauf zeigt. Abgewählte bleiben ausgeblendet. Gilt für dieses Gerät.</p>
-        {CHARTS.map((c) => (
-          <label key={c.key} className="flex items-center gap-3 py-1 text-sm text-slate-200">
+        <p className="text-sm text-slate-400">Welche Diagramme der Verlauf zeigt und in welcher Reihenfolge. Häkchen = sichtbar, ☰ ziehen = verschieben. Gilt für dieses Gerät.</p>
+        <SortableList
+          items={order.map((k) => ({ key: k, label: CHART_LABEL[k], muted: !charts.has(k) }))}
+          onChange={(keys) => {
+            const next = normalizeOrder(keys);
+            setOrder(next);
+            saveOrder(next);
+            onDataChanged();
+          }}
+          right={(it) => (
             <input
               type="checkbox"
-              className="h-4 w-4 accent-[#8B5CF6]"
-              checked={charts.has(c.key)}
+              className="h-5 w-5 shrink-0 accent-[#8B5CF6]"
+              aria-label={`${it.label} anzeigen`}
+              checked={charts.has(it.key)}
               onChange={() => {
                 const n = new Set<string>(charts);
-                if (n.has(c.key)) n.delete(c.key);
-                else n.add(c.key);
+                if (n.has(it.key)) n.delete(it.key);
+                else n.add(it.key);
                 saveCharts(n);
                 setCharts(n);
                 onDataChanged();
               }}
             />
-            {c.label}
-          </label>
-        ))}
+          )}
+        />
         <label className="flex items-center gap-3 py-1 text-sm text-slate-200 border-t border-white/5 pt-3">
           <input
             type="checkbox"

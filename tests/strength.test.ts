@@ -151,3 +151,14 @@ describe('Warteschlange ohne Netz', () => {
     expect(queuedCount()).toBe(1);
   });
 });
+
+describe('Reihenfolge der Diagramme', () => {
+  it('unbekannte fallen weg, neue kommen ans Ende, verschieben', async () => {
+    const { normalizeOrder, moveItem, CHARTS } = await import('../lib/chartPrefs');
+    const o = normalizeOrder(['balance', 'gibtsnicht', 'body', 'balance']);
+    expect(o.slice(0, 2)).toEqual(['balance', 'body']);
+    expect(o).toHaveLength(CHARTS.length);
+    expect(moveItem(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd']);
+    expect(moveItem(['a', 'b', 'c', 'd'], 3, 0)).toEqual(['d', 'a', 'b', 'c']);
+  });
+});
