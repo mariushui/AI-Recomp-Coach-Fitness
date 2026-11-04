@@ -2,12 +2,17 @@
 
 import type { Entry, BodyData, HealthData, MealData, WorkoutData, Sport } from '../supabase/functions/_shared/domain';
 import { addDays, dayKey, startOfDay, weekKey } from './time';
+import { skinfoldSum } from './bodyfat';
 
 export interface DayStats {
   day: string;
   weight?: number;
   bodyFat?: number;
   waist?: number;
+  chest?: number;
+  hip?: number;
+  arm?: number;
+  skinfoldSum?: number; // Summe der 7 Hautfalten in mm
   protein?: number;
   kcal?: number;
   carbs?: number;
@@ -54,6 +59,10 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         if (b.weight_kg !== undefined && s.weight === undefined) s.weight = b.weight_kg;
         if (b.body_fat_pct !== undefined && s.bodyFat === undefined) s.bodyFat = b.body_fat_pct;
         if (b.waist_cm !== undefined) s.waist = b.waist_cm;
+        if (b.chest_cm !== undefined) s.chest = b.chest_cm;
+        if (b.hip_cm !== undefined) s.hip = b.hip_cm;
+        if (b.arm_cm !== undefined) s.arm = b.arm_cm;
+        { const sf = skinfoldSum(b.skinfolds); if (sf !== undefined) s.skinfoldSum = sf; }
         if (b.muscle_kg !== undefined) s.muscle = b.muscle_kg;
         break;
       }

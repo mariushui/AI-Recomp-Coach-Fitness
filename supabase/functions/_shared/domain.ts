@@ -98,6 +98,12 @@ export interface BodyData {
   body_fat_pct?: number;
   waist_cm?: number;
   muscle_kg?: number; // Muskelmasse laut Waage. Je nach Waage fettfreie Masse ohne Knochen oder nur Skelettmuskulatur
+  chest_cm?: number; // Brustumfang
+  hip_cm?: number; // Hüftumfang
+  arm_cm?: number; // Oberarmumfang, angespannt
+  // 7-Punkte-Hautfalten in mm (Jackson-Pollock 7)
+  skinfolds?: Partial<Record<'chest' | 'midaxillary' | 'triceps' | 'subscapular' | 'abdomen' | 'suprailiac' | 'thigh', number>>;
+  body_fat_method?: 'hautfalten' | 'waage'; // woher body_fat_pct stammt
   bp_systolic?: number;
   bp_diastolic?: number;
 }
@@ -148,6 +154,8 @@ export const HEALTH_METRICS = [
   'resp_rate', // Atemzüge pro Minute
   'wrist_temp', // °C, nachts am Handgelenk
   'lean_mass', // kg, magere Körpermasse laut Waage
+  'resting_kcal', // Ruheenergie pro Tag
+  'walking_hr', // durchschnittliche Herzfrequenz beim Gehen
   'sleep',
   'workout',
 ] as const;
@@ -319,6 +327,19 @@ export function normalizeData<K extends EntryKind>(kind: K, raw: any): EntryData
         body_fat_pct: num(raw.body_fat_pct),
         waist_cm: num(raw.waist_cm),
         muscle_kg: num(raw.muscle_kg),
+        chest_cm: num(raw.chest_cm),
+        hip_cm: num(raw.hip_cm),
+        arm_cm: num(raw.arm_cm),
+        skinfolds: (() => {
+          if (!raw.skinfolds || typeof raw.skinfolds !== 'object') return undefined;
+          const out: Record<string, number> = {};
+          for (const k of ['chest', 'midaxillary', 'triceps', 'subscapular', 'abdomen', 'suprailiac', 'thigh']) {
+            const v = num(raw.skinfolds[k]);
+            if (v !== undefined && v > 0) out[k] = v;
+          }
+          return Object.keys(out).length ? out : undefined;
+        })(),
+        body_fat_method: raw.body_fat_method === 'hautfalten' || raw.body_fat_method === 'waage' ? raw.body_fat_method : undefined,
         bp_systolic: num(raw.bp_systolic),
         bp_diastolic: num(raw.bp_diastolic),
       });

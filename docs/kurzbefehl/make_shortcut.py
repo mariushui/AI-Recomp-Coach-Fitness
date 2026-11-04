@@ -164,6 +164,7 @@ SUMMED_TYPES = [
     # (Typ, Präfix der Variablen, Schlüssel im Paket)
     ("Steps", "T", "steps"),
     ("Active Calories", "A", "active_kcal"),
+    ("Resting Energy", "RE", "resting_kcal"),
     ("Exercise Minutes", "E", "exercise_min"),
     ("Walking + Running Distance", "L", "distance_walk_run"),
     ("Cycling Distance", "C", "distance_cycling"),
@@ -178,6 +179,7 @@ POINT_TYPES = [
     ("Respiratory Rate", "AFW", "AFD", "resp_rate", 40),
     ("Wrist Temperature", "WTW", "WTD", "wrist_temp", 10),
     ("Cardio Fitness", "VW", "VD", "vo2max", 5),
+    ("Walking Heart Rate Average", "GHW", "GHD", "walking_hr", 10),
     ("Body Mass Index", "BMW", "BMD", "bmi", 10),
     ("Lean Body Mass", "MMW", "MMD", "lean_mass", 10),
 ]

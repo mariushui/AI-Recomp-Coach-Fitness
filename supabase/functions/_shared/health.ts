@@ -44,7 +44,7 @@ export interface HealthParseResult {
   warnings: string[];
 }
 
-type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2' | 'hr_recovery' | 'glucose' | 'bmi' | 'resp_rate' | 'wrist_temp' | 'lean_mass';
+type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2' | 'hr_recovery' | 'glucose' | 'bmi' | 'resp_rate' | 'wrist_temp' | 'lean_mass' | 'walking_hr';
 
 const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' | 'mean'; min: number; max: number }> = {
   weight: { unit: 'kg', pick: 'first', min: 25, max: 300 }, // erste Messung des Tages = morgens
@@ -59,6 +59,7 @@ const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' 
   resp_rate: { unit: '/min', pick: 'mean', min: 4, max: 40 },
   wrist_temp: { unit: '°C', pick: 'mean', min: -5, max: 45 }, // je nach iOS absolut oder als Abweichung
   lean_mass: { unit: 'kg', pick: 'first', min: 20, max: 150 },
+  walking_hr: { unit: 'bpm', pick: 'mean', min: 40, max: 180 },
 };
 
 /** Liest eine Liste aus Text (Zeilen) oder Array. */
@@ -311,8 +312,8 @@ function parseSleep(block: any, warnings: string[], tz: string): HealthRow[] {
 }
 
 /** Tagessumme je Quelle, die größte Quelle zählt (Schritte, aktive Kalorien, Trainingsminuten). */
-type SummedMetric = 'steps' | 'active_kcal' | 'exercise_min' | 'distance_walk_run' | 'distance_cycling' | 'distance_swim' | 'swim_strokes';
-const SUMMED: Record<SummedMetric, string> = { steps: 'Schritte', active_kcal: 'kcal', exercise_min: 'min', distance_walk_run: 'km', distance_cycling: 'km', distance_swim: 'm', swim_strokes: 'Züge' };
+type SummedMetric = 'steps' | 'active_kcal' | 'resting_kcal' | 'exercise_min' | 'distance_walk_run' | 'distance_cycling' | 'distance_swim' | 'swim_strokes';
+const SUMMED: Record<SummedMetric, string> = { steps: 'Schritte', active_kcal: 'kcal', resting_kcal: 'kcal', exercise_min: 'min', distance_walk_run: 'km', distance_cycling: 'km', distance_swim: 'm', swim_strokes: 'Züge' };
 
 function parseSummed(metric: SummedMetric, unit: string, block: any, warnings: string[], tz: string): HealthRow[] {
   const values = toList(block?.values);
