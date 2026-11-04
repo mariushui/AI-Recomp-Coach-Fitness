@@ -112,7 +112,7 @@ export async function runJobs(): Promise<void> {
           emit({ type: 'done', job, summary, questions });
           continue;
         }
-        const r = await parseText(job.text);
+        const r = await parseText(job.text, null, undefined, 'nutrition');
         const meals = r.entries.filter((e) => e.kind === 'meal').map((e) => e.data as any);
         if (!meals.length) throw new Error('Keine Nährwerte erkannt.');
         // Aktuellen Stand holen, damit inzwischen gemachte Änderungen nicht überschrieben werden

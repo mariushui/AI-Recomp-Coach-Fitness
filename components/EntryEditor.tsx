@@ -57,7 +57,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
     if (onRecalcBackground) return onRecalcBackground(text);
     setRecalc('busy');
     try {
-      const r = await parseText(text);
+      const r = await parseText(text, null, undefined, 'nutrition');
       const meals = r.entries.filter((e) => e.kind === 'meal').map((e) => e.data as any);
       if (meals.length === 0) throw new Error('Keine Nährwerte erkannt.');
       onChange({ ...draft, data: applyRecalc(d, meals) });
