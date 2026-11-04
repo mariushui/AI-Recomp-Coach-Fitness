@@ -24,6 +24,8 @@ export interface MealData {
  * Mikronährstoffe, die die KI je Mahlzeit schätzt. ref = Tageswert für einen Mann um 45 Jahre
  * (DGE-Referenzwerte, Zucker und gesättigte Fette nach WHO, Natrium als 6 g Salz). dir: 'min' = mindestens erreichen,
  * 'max' = nicht überschreiten. cap = Obergrenze je Mahlzeit, darüber gilt der Wert als Fehler.
+ * basis 'woche': der Körper speichert den Nährstoff (Vitamin D, B12, Folat, Eisen, Zink, Omega-3), bewertet wird der Schnitt
+ * der letzten 7 Tage. Alle anderen werden am Tag bewertet.
  */
 export const MICROS = [
   { key: 'fiber_g', label: 'Ballaststoffe', unit: 'g', ref: 30, dir: 'min', cap: 80 },
@@ -33,13 +35,13 @@ export const MICROS = [
   { key: 'potassium_mg', label: 'Kalium', unit: 'mg', ref: 4000, dir: 'min', cap: 10000 },
   { key: 'magnesium_mg', label: 'Magnesium', unit: 'mg', ref: 350, dir: 'min', cap: 2000 },
   { key: 'calcium_mg', label: 'Calcium', unit: 'mg', ref: 1000, dir: 'min', cap: 4000 },
-  { key: 'iron_mg', label: 'Eisen', unit: 'mg', ref: 11, dir: 'min', cap: 100 },
-  { key: 'zinc_mg', label: 'Zink', unit: 'mg', ref: 14, dir: 'min', cap: 100 },
-  { key: 'vitamin_d_ug', label: 'Vitamin D', unit: 'µg', ref: 20, dir: 'min', cap: 250 },
-  { key: 'vitamin_b12_ug', label: 'Vitamin B12', unit: 'µg', ref: 4, dir: 'min', cap: 1000 },
+  { key: 'iron_mg', label: 'Eisen', unit: 'mg', ref: 11, dir: 'min', cap: 100, basis: 'woche' },
+  { key: 'zinc_mg', label: 'Zink', unit: 'mg', ref: 14, dir: 'min', cap: 100, basis: 'woche' },
+  { key: 'vitamin_d_ug', label: 'Vitamin D', unit: 'µg', ref: 20, dir: 'min', cap: 250, basis: 'woche' },
+  { key: 'vitamin_b12_ug', label: 'Vitamin B12', unit: 'µg', ref: 4, dir: 'min', cap: 1000, basis: 'woche' },
   { key: 'vitamin_c_mg', label: 'Vitamin C', unit: 'mg', ref: 110, dir: 'min', cap: 3000 },
-  { key: 'folate_ug', label: 'Folat', unit: 'µg', ref: 300, dir: 'min', cap: 3000 },
-  { key: 'omega3_g', label: 'Omega-3 (EPA, DHA)', unit: 'g', ref: 0.25, dir: 'min', cap: 10 },
+  { key: 'folate_ug', label: 'Folat', unit: 'µg', ref: 300, dir: 'min', cap: 3000, basis: 'woche' },
+  { key: 'omega3_g', label: 'Omega-3 (EPA, DHA)', unit: 'g', ref: 0.25, dir: 'min', cap: 10, basis: 'woche' },
 ] as const;
 export type MicroKey = (typeof MICROS)[number]['key'];
 export type Micros = Partial<Record<MicroKey, number>>;

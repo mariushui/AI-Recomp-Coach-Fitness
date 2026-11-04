@@ -27,9 +27,24 @@ describe('Ziel-Vorschläge', () => {
   });
 
   it('rechnet das Kalorienziel täglich aus Verbrauch, sonst fester Wert', () => {
-    expect(dailyKcalTarget(67.2, 880, 600, 2500)).toEqual({ goal: 2900, dynamic: true }); // heute aktiv 880
-    expect(dailyKcalTarget(67.2, undefined, 600, 2500)).toEqual({ goal: 2600, dynamic: true }); // Schnitt
+    expect(dailyKcalTarget(67.2, 880, 600, 2500)).toEqual({ goal: 2900, burn: 2900, dynamic: true }); // heute aktiv 880
+    expect(dailyKcalTarget(67.2, undefined, 600, 2500)).toEqual({ goal: 2600, burn: 2600, dynamic: true }); // Schnitt
     expect(dailyKcalTarget(undefined, 880, 600, 2500)).toEqual({ goal: 2500, dynamic: false });
     expect(dailyKcalTarget(undefined, undefined, undefined, null)).toEqual({ goal: undefined, dynamic: false });
+  });
+});
+
+describe('Ziel-Modus', () => {
+  it('Recomposition 10 % unter dem Verbrauch, Massephase 10 % darüber, auf 50 kcal gerundet', async () => {
+    const { dailyKcalTarget } = await import('../lib/profile');
+    expect(dailyKcalTarget(67.2, 880, 600, 2500, -10)).toEqual({ goal: 2600, burn: 2900, dynamic: true });
+    expect(dailyKcalTarget(67.2, 880, 600, 2500, 10)).toEqual({ goal: 3200, burn: 2900, dynamic: true });
+  });
+  it('eigener Wert schlägt den Standard des Modus', async () => {
+    const { adjustPct } = await import('../lib/profile');
+    expect(adjustPct({ energy_mode: 'recomp' })).toBe(-10);
+    expect(adjustPct({ energy_mode: 'recomp', kcal_adjust_pct: -15 })).toBe(-15);
+    expect(adjustPct({ energy_mode: 'abnehmen' })).toBe(-20);
+    expect(adjustPct({})).toBe(0);
   });
 });

@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MICROS, normalizeData, type Entry, type MealData } from '../supabase/functions/_shared/domain';
 import { deleteEntry, listEntries, updateEntry } from '../lib/entries';
-import { dailyKcalTarget, loadProfile, type Profile } from '../lib/profile';
+import { adjustPct, dailyKcalTarget, loadProfile, type Profile } from '../lib/profile';
 import { average, dailyStats } from '../lib/stats';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
@@ -62,7 +62,7 @@ const NutritionView: React.FC<{ refreshKey: number; onChanged: () => void }> = (
     const d = days[idx];
     const lean = days.slice(0, idx + 1).map((x) => x.leanMass).filter((x): x is number => typeof x === 'number');
     const active = isToday ? estimateActiveToday(days, entries).value : d?.activeKcal;
-    const kcal = dailyKcalTarget(lean[lean.length - 1], active, average(days.slice(Math.max(0, idx - 14), idx), 'activeKcal'), profile?.kcal_goal);
+    const kcal = dailyKcalTarget(lean[lean.length - 1], active, average(days.slice(Math.max(0, idx - 14), idx), 'activeKcal'), profile?.kcal_goal, profile ? adjustPct(profile) : 0);
     const meals = entries
       .filter((e): e is Entry<'meal'> => e.kind === 'meal' && dayKey(e.occurred_at) === key)
       .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
@@ -185,7 +185,7 @@ const NutritionView: React.FC<{ refreshKey: number; onChanged: () => void }> = (
         <Title
           sub={
             withMicros
-              ? `KI-Schätzung aus ${withMicros} von ${micro?.meals ?? 0} Mahlzeiten. Grob, vor allem bei Vitaminen. Tageswert für Männer um 45 nach DGE.`
+              ? `KI-Schätzung aus ${withMicros} von ${micro?.meals ?? 0} Mahlzeiten. Grob, vor allem bei Vitaminen. Tageswert für Männer um 45 nach DGE. Vitamin D, B12, Folat, Eisen, Zink und Omega-3 speichert der Körper, sie zählen im Wochenschnitt.`
               : 'Für diesen Tag gibt es noch keine Schätzung. Neue Mahlzeiten bekommen sie automatisch. Ältere: Mahlzeit antippen, „Nährwerte neu berechnen“.'
           }
         >
@@ -207,23 +207,26 @@ const NutritionView: React.FC<{ refreshKey: number; onChanged: () => void }> = (
                 const z = microZone(m.key, v);
                 const w = week.micros[m.key];
                 const wz = microZone(m.key, w);
+                // Speicher-Nährstoffe (Vitamin D, B12, Folat, Eisen, Zink, Omega-3) zählen im Wochenschnitt
+                const weekly = 'basis' in m && m.basis === 'woche';
+                const main = weekly ? wz : z;
                 return (
                   <tr key={m.key} className="border-t border-white/5">
                     <td className="py-1.5 text-slate-200">
                       {m.label}
                       <span className="block text-[10px] text-slate-500">
-                        {m.dir === 'max' ? 'höchstens' : 'Ziel'} {m.ref.toLocaleString('de-DE')} {m.unit}
+                        {weekly ? 'Ziel Ø Woche' : m.dir === 'max' ? 'höchstens' : 'Ziel'} {m.ref.toLocaleString('de-DE')} {m.unit}
                       </span>
                     </td>
-                    <td className="py-1.5 text-right tabular-nums font-bold" style={{ color: z?.color ?? '#475569' }}>
+                    <td className={`py-1.5 text-right tabular-nums ${weekly ? 'text-xs' : 'font-bold'}`} style={{ color: weekly ? '#94a3b8' : z?.color ?? '#475569' }}>
                       {v !== undefined ? fmtMicro(m.key, v) : '–'}
                     </td>
                     <td className="py-1.5 pl-2">
                       <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                        {z && <div className="h-full rounded-full" style={{ width: `${Math.min(100, z.pct)}%`, background: z.color }} />}
+                        {main && <div className="h-full rounded-full" style={{ width: `${Math.min(100, main.pct)}%`, background: main.color }} />}
                       </div>
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-xs" style={{ color: wz?.color ?? '#475569' }}>
+                    <td className={`py-1.5 text-right tabular-nums ${weekly ? 'font-bold' : 'text-xs'}`} style={{ color: wz?.color ?? '#475569' }}>
                       {w !== undefined ? fmtMicro(m.key, w) : '–'}
                     </td>
                   </tr>

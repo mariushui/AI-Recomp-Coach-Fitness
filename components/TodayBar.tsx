@@ -2,7 +2,7 @@
 // Erholung in Prozent, Schlaf in Prozent mit Dauer, Belastung 0 bis 10 mit Zielbereich, Verbrauch in kcal.
 import React, { useEffect, useState } from 'react';
 import { listEntries } from '../lib/entries';
-import { dailyKcalTarget, loadProfile } from '../lib/profile';
+import { adjustPct, dailyKcalTarget, loadProfile } from '../lib/profile';
 import { average } from '../lib/stats';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
@@ -76,6 +76,7 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [burned, setBurned] = useState<number | undefined>();
   const [kcalDynamic, setKcalDynamic] = useState(false);
   const [estimated, setEstimated] = useState(false);
+  const [pct, setPct] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -92,9 +93,10 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         // Apple liefert den Tag erst beim nächsten Abgleich. Bis dahin: Alltag + Training heute (erledigt oder geplant).
         const active = estimateActiveToday(days, entries, now);
         setEstimated(active.estimated);
-        const kcal = dailyKcalTarget(lean[lean.length - 1], active.value ?? today?.activeKcal, average(days.slice(-15, -1), 'activeKcal'), profile.kcal_goal);
+        const kcal = dailyKcalTarget(lean[lean.length - 1], active.value ?? today?.activeKcal, average(days.slice(-15, -1), 'activeKcal'), profile.kcal_goal, adjustPct(profile));
         setKcalDynamic(kcal.dynamic);
-        setBurned(kcal.dynamic ? kcal.goal : undefined);
+        setBurned(kcal.dynamic ? kcal.burn : undefined);
+        setPct(adjustPct(profile));
         setS(todaySummary(entries, { protein: profile.protein_goal_g, kcal: kcal.goal, carbs: profile.carbs_goal_g, fat: profile.fat_goal_g }, now));
         const rec = dailyRecovery(days);
         setRecovery(rec[rec.length - 1]);
@@ -124,6 +126,7 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
         {kcalDynamic && (
           <p className="text-[10px] text-slate-500 pt-0.5">
             {estimated ? 'Kalorienziel = Grundumsatz + geschätzt aktiv (Alltag + Training laut Plan)' : 'Kalorienziel = Grundumsatz + aktive Kalorien heute aus Apple Health'}
+            {pct !== 0 ? `, ${pct > 0 ? '+' : '−'}${Math.abs(pct)} % laut Ziel-Modus` : ''}
           </p>
         )}
       </div>

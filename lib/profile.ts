@@ -8,9 +8,61 @@ export interface Profile {
   birth_date?: string | null; // YYYY-MM-DD
   carbs_goal_g?: number | null;
   fat_goal_g?: number | null;
+  energy_mode?: EnergyMode | null; // Ziel-Modus
+  kcal_adjust_pct?: number | null; // Abweichung vom Verbrauch in %, negativ = Defizit
 }
 
-const COLUMNS = 'display_name, height_cm, protein_goal_g, kcal_goal, birth_date, carbs_goal_g, fat_goal_g';
+const COLUMNS = 'display_name, height_cm, protein_goal_g, kcal_goal, birth_date, carbs_goal_g, fat_goal_g, energy_mode, kcal_adjust_pct';
+
+export type EnergyMode = 'recomp' | 'abnehmen' | 'halten' | 'masse';
+
+/**
+ * Ziel-Modi mit Empfehlung aus der Literatur (docs/literatur/studien.md):
+ * - Nr. 6, Helms, Aragon, Fitschen 2014: Gewichtsverlust 0,5 bis 1 % pro Woche, um Muskeln zu erhalten.
+ * - Nr. 14, Iraki et al. 2019: Überschuss 10 bis 20 %, Fortgeschrittene eher 5 bis 10 %, Zunahme 0,25 bis 0,5 % pro Woche.
+ * - Recomposition: kleineres Defizit als beim Abnehmen, damit Muskeln trotz Defizit wachsen können (Ableitung, keine eigene Studie).
+ * Protein bleibt in allen Modi bei 2 g je kg Magermasse (Vorgabe Marius).
+ */
+export const ENERGY_MODES: Record<EnergyMode, { label: string; pct: number; min: number; max: number; rate: string; text: string }> = {
+  recomp: {
+    label: 'Body Recomposition',
+    pct: -10,
+    min: -15,
+    max: -5,
+    rate: 'Gewicht −0 bis −0,5 % pro Woche, Taille sinkt, Kraft steigt',
+    text: 'Leichtes Defizit von 5 bis 15 %. Fett geht langsam runter, mit viel Protein und Krafttraining bleiben oder wachsen die Muskeln. Passt bei mittlerem Körperfett und regelmäßigem Krafttraining.',
+  },
+  abnehmen: {
+    label: 'Abnehmen',
+    pct: -20,
+    min: -25,
+    max: -15,
+    rate: 'Gewicht −0,5 bis −1 % pro Woche',
+    text: 'Deutliches Defizit von 15 bis 25 %. Schneller Fettverlust, Muskeln schützen hohes Protein und weiter schweres Krafttraining. Über 1 % pro Woche geht es meist auf Kosten von Muskeln und Leistung.',
+  },
+  halten: {
+    label: 'Gewicht halten',
+    pct: 0,
+    min: -5,
+    max: 5,
+    rate: 'Gewicht ±0,25 % pro Woche',
+    text: 'Essen auf Höhe des Verbrauchs. Gut für Wettkampfphasen, Urlaub oder als Pause zwischen Defizit und Aufbau.',
+  },
+  masse: {
+    label: 'Massephase',
+    pct: 10,
+    min: 5,
+    max: 15,
+    rate: 'Gewicht +0,25 bis +0,5 % pro Woche',
+    text: 'Leichter Überschuss für Muskelaufbau, Trainierte eher 5 bis 10 %. Größerer Überschuss bringt kaum mehr Muskeln, aber mehr Fett. Taille im Blick behalten.',
+  },
+};
+
+/** Gewählte Anpassung in Prozent: eigener Wert, sonst Standard des Modus, sonst 0. */
+export function adjustPct(p: Pick<Profile, 'energy_mode' | 'kcal_adjust_pct'>): number {
+  if (typeof p.kcal_adjust_pct === 'number') return p.kcal_adjust_pct;
+  return p.energy_mode ? ENERGY_MODES[p.energy_mode].pct : 0;
+}
 
 export async function loadProfile(userId?: string): Promise<Profile> {
   const uid = userId ?? (await supabase.auth.getSession()).data.session?.user.id;
@@ -72,15 +124,17 @@ export function suggestedMacroGoals(kcalGoal: number | undefined, proteinGoal: n
  * Kalorienziel für einen Tag: Grundumsatz (Katch-McArdle aus der fettfreien Masse) plus 10 % Verdauung
  * plus die aktiven Kalorien dieses Tages aus Apple Health. Fehlt der Tageswert, zählt der 14-Tage-Schnitt.
  * Ohne fettfreie Masse bleibt es beim festen Ziel aus den Einstellungen.
+ * goal = Verbrauch plus Anpassung des Ziel-Modus (z. B. −10 % bei Recomposition), burn = Verbrauch ohne Anpassung.
  */
 export function dailyKcalTarget(
   leanMassKg: number | undefined,
   activeToday: number | undefined,
   activeAvg: number | undefined,
   fixedGoal: number | null | undefined,
-): { goal: number | undefined; dynamic: boolean } {
-  const dyn = suggestedKcalGoal(leanMassKg, activeToday ?? activeAvg);
-  if (dyn !== undefined) return { goal: dyn, dynamic: true };
+  pct = 0, // Ziel-Modus: Abweichung vom Verbrauch in Prozent
+): { goal: number | undefined; burn?: number; dynamic: boolean } {
+  const burn = suggestedKcalGoal(leanMassKg, activeToday ?? activeAvg);
+  if (burn !== undefined) return { goal: Math.round((burn * (1 + pct / 100)) / 50) * 50, burn, dynamic: true };
   return { goal: fixedGoal ?? undefined, dynamic: false };
 }
 
