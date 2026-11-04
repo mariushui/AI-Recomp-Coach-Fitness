@@ -5,12 +5,14 @@ import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
 import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainLabel, strainTarget } from '../lib/recovery';
 import RingCalendar, { type RingDay } from './RingCalendar';
+import { SLOTS, SLOT_COLOR, SLOT_LABEL, mealBreakdown, slotSeries, type Macro } from '../lib/meals';
 import { matchPlans } from '../lib/plans';
 import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
 import { expandSlots, visiblePlans } from '../lib/planTemplate';
 import { loadProfile } from '../lib/profile';
 import { loadCharts } from '../lib/chartPrefs';
-import { addDays, dayKey, startOfDay } from '../lib/time';
+import { addDays, dayKey, startOfDay, weekKey } from '../lib/time';
+const weekOf = (day: string) => weekKey(new Date(day + 'T12:00:00'));
 import { aggregate, buckets, granularityFor, trainingRows } from './trendData';
 import { Card, ErrorBox } from './ui';
 
@@ -148,6 +150,7 @@ const has = (rows: Record<string, any>[], k: string) => rows.some((r) => typeof 
 const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [range, setRangeState] = useState<Range>(loadRange);
   const [ringMode, setRingMode] = useState<'recovery' | 'strain' | 'sleep'>('recovery');
+  const [mealMacro, setMealMacro] = useState<Macro>('protein');
   const setRange = (r: Range) => {
     setRangeState(r);
     try {
@@ -255,6 +258,16 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
       .filter(Boolean)
       .join(' · ');
   const todayKey = dayKey(new Date());
+  // Ernährung nach Mahlzeit: Tageswerte je Zeitfenster, bei Wochen Mittel über Tage mit Essen
+  const mealDaily = slotSeries(entries, mealMacro, (iso) => dayKey(iso));
+  const mealRows = rows.map((r) => {
+    const keys = g === 'day' ? [r.key as string] : (days as any[]).filter((d) => weekOf(d.day) === r.key).map((d) => d.day);
+    const withFood = keys.map((k) => mealDaily.get(k)).filter(Boolean) as Record<string, number>[];
+    const out: Record<string, any> = { key: r.key, label: r.label };
+    if (withFood.length) for (const s of SLOTS) out[s] = Math.round(withFood.reduce((a, x) => a + x[s], 0) / withFood.length);
+    return out;
+  });
+  const mealTable = mealBreakdown(entries);
   const ringDays: RingDay[] = days.map((d: any) => {
     if (ringMode === 'recovery') return { day: d.day, value: d.recovery, max: 100, color: recoveryLabel(d.recovery).color };
     if (ringMode === 'strain') {
@@ -374,6 +387,84 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
               />
             ))}
           </ComposedChart>
+        </Chart>
+      )}
+
+      {show('meals') && mealTable.days > 0 && (
+        <Chart
+          plain
+          title="Ernährung nach Mahlzeit"
+          summary={`${mealTable.proteinMealsPerDay.toLocaleString('de-DE')} proteinreiche Mahlzeiten pro Tag (ab 30 g)`}
+          hint="Balken: wie sich der gewählte Nährwert auf Frühstück, Mittag, Abend und Snacks verteilt. Ohne Angabe der Mahlzeit entscheidet die Uhrzeit, Shakes und Ergänzungen zählen zu Snacks. Tabelle: Mittel pro Tag mit Essen im Zeitraum. Für die Recomposition zählen Protein über den Tag verteilt und ein Kaloriendefizit, Kohlenhydrate eher dort, wo du Konzentration oder Training brauchst."
+          controls={
+            <div className="flex gap-1.5 flex-wrap">
+              {MACROS.map((mm) => (
+                <button key={mm.key} type="button" onClick={() => setMealMacro(mm.key as Macro)} aria-pressed={mealMacro === mm.key} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${mealMacro === mm.key ? 'text-slate-100 border-white/20 bg-white/5' : 'text-slate-500 border-white/5'}`}>
+                  <span className="h-2 w-2 rounded-full" style={{ background: mm.color }} />
+                  {mm.label}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <div>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={mealRows}>
+                  <CartesianGrid stroke="#1e293b" vertical={false} />
+                  {xAxis}
+                  <YAxis {...axis} width={36} />
+                  <Tooltip {...tooltipStyle} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                  {SLOTS.map((s, i) => (
+                    <Bar key={s} dataKey={s} name={SLOT_LABEL[s]} stackId="m" fill={SLOT_COLOR[s]} radius={i === SLOTS.length - 1 ? [3, 3, 0, 0] : undefined} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-2">
+              {SLOTS.map((s) => (
+                <span key={s} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <span className="h-2 w-2 rounded-sm" style={{ background: SLOT_COLOR[s] }} />
+                  {SLOT_LABEL[s]}
+                </span>
+              ))}
+            </div>
+            <table className="w-full mt-3 text-xs tabular-nums">
+              <thead>
+                <tr className="text-slate-500">
+                  <th className="text-left font-bold py-1">Ø pro Tag</th>
+                  <th className="text-right font-bold" style={{ color: '#ADFF2F' }}>Protein</th>
+                  <th className="text-right font-bold" style={{ color: '#FBBF24' }}>KH</th>
+                  <th className="text-right font-bold" style={{ color: '#FF375F' }}>Fett</th>
+                  <th className="text-right font-bold" style={{ color: '#8B5CF6' }}>kcal</th>
+                  <th className="text-right font-bold">Anteil</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mealTable.rows.map((r) => (
+                  <tr key={r.slot} className="border-t border-white/5 text-slate-200">
+                    <td className="py-1.5">
+                      <span className="inline-block h-2 w-2 rounded-sm mr-1.5" style={{ background: SLOT_COLOR[r.slot] }} />
+                      {SLOT_LABEL[r.slot]}
+                    </td>
+                    <td className="text-right">{r.avg.protein} g</td>
+                    <td className="text-right">{r.avg.carbs} g</td>
+                    <td className="text-right">{r.avg.fat} g</td>
+                    <td className="text-right">{r.avg.kcal}</td>
+                    <td className="text-right text-slate-400">{Math.round(r.share * 100)} %</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-white/10 font-bold text-slate-100">
+                  <td className="py-1.5">Summe</td>
+                  {(['protein', 'carbs', 'fat'] as const).map((k) => (
+                    <td key={k} className="text-right">{mealTable.rows.reduce((a, r) => a + r.avg[k], 0)} g</td>
+                  ))}
+                  <td className="text-right">{mealTable.rows.reduce((a, r) => a + r.avg.kcal, 0)}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </Chart>
       )}
 

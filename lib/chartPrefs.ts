@@ -3,6 +3,7 @@
 export const CHARTS = [
   { key: 'body', label: 'Gewicht und Körper' },
   { key: 'nutrition', label: 'Ernährung' },
+  { key: 'meals', label: 'Ernährung nach Mahlzeit' },
   { key: 'training', label: 'Training und Plan' },
   { key: 'activity', label: 'Aktivität (Schritte, Ringe)' },
   { key: 'heart', label: 'Herz: Ruhepuls, HRV, Cardio-Erholung' },
