@@ -8,6 +8,41 @@ import { Button } from './ui';
 
 const LAST_KEY = 'recomp_vault_export_last';
 
+/** Standardordner im Vault (iCloud), so wie er am Mac heißt. Auf dem iPhone unter Dateien → Obsidian → Marius_Vault. */
+export const VAULT_PATH_MAC = '/Users/mariushuinink/Library/Mobile Documents/iCloud~md~obsidian/Documents/Marius_Vault/01 marius privat/Sport&Health/Health App Export';
+export const VAULT_PATH_IPHONE = 'Obsidian → Marius_Vault → 01 marius privat → Sport&Health → Health App Export';
+
+// Ordner-Zugriff am Mac (Chrome, Edge): einmal verbinden, Handle im Browser merken. Safari und iPhone können das nicht.
+type DirHandle = { name: string; getFileHandle: (n: string, o: { create: boolean }) => Promise<any>; queryPermission?: (o: any) => Promise<string>; requestPermission?: (o: any) => Promise<string> };
+const canPickFolder = () => typeof window !== 'undefined' && 'showDirectoryPicker' in window;
+
+function idb<T>(fn: (store: IDBObjectStore) => IDBRequest<T>, mode: IDBTransactionMode = 'readonly'): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open('recomp-vault', 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('kv');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const req = fn(open.result.transaction('kv', mode).objectStore('kv'));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    };
+  });
+}
+const loadDir = () => idb<DirHandle | undefined>((s) => s.get('dir')).catch(() => undefined);
+const saveDir = (h: DirHandle) => idb((s) => s.put(h, 'dir'), 'readwrite');
+
+async function writeToDir(dir: DirHandle, files: VaultFile[]): Promise<boolean> {
+  const opts = { mode: 'readwrite' };
+  if ((await dir.queryPermission?.(opts)) !== 'granted' && (await dir.requestPermission?.(opts)) !== 'granted') return false;
+  for (const f of files) {
+    const fh = await dir.getFileHandle(f.name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(f.content);
+    await w.close();
+  }
+  return true;
+}
+
 async function filesFor(months: string[]): Promise<VaultFile[]> {
   const first = months[0].split('-').map(Number);
   const last = months[months.length - 1].split('-').map(Number);
@@ -30,7 +65,9 @@ function monthsSince(firstIso: string, now = new Date()): string[] {
 }
 
 /** Teilen-Menü, wenn das Gerät Dateien teilen kann (iPhone), sonst Download je Datei (Mac). */
-async function deliver(files: VaultFile[]): Promise<'geteilt' | 'geladen'> {
+async function deliver(files: VaultFile[]): Promise<'geteilt' | 'geladen' | 'geschrieben'> {
+  const dir = canPickFolder() ? await loadDir() : undefined;
+  if (dir && (await writeToDir(dir, files))) return 'geschrieben';
   const list = files.map((f) => new File([f.content], f.name, { type: 'text/markdown' }));
   const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
   if (nav.share && nav.canShare?.({ files: list })) {
@@ -59,6 +96,21 @@ const VaultExport: React.FC = () => {
     }
   });
 
+  const [dirName, setDirName] = useState<string | null>(null);
+  React.useEffect(() => {
+    if (canPickFolder()) loadDir().then((h) => setDirName(h?.name ?? null));
+  }, []);
+  const pickFolder = async () => {
+    try {
+      const h = (await (window as any).showDirectoryPicker({ mode: 'readwrite', id: 'recomp-vault' })) as DirHandle;
+      await saveDir(h);
+      setDirName(h.name);
+      setMsg(`Verbunden mit „${h.name}“. Exporte landen jetzt direkt dort.`);
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') setMsg(`Ordner nicht verbunden: ${(e as Error).message}`);
+    }
+  };
+
   const run = async (all: boolean) => {
     setBusy(true);
     setMsg(null);
@@ -78,9 +130,11 @@ const VaultExport: React.FC = () => {
       }
       setLast(stamp);
       setMsg(
-        how === 'geteilt'
-          ? `${files.length} Dateien bereit. Im Teilen-Menü „In Dateien sichern“ wählen und den Vault-Ordner nehmen, vorhandene ersetzen.`
-          : `${files.length} Dateien heruntergeladen. In den Vault-Ordner verschieben, vorhandene ersetzen.`,
+        how === 'geschrieben'
+          ? `${files.length} Dateien in „${dirName}“ gespeichert.`
+          : how === 'geteilt'
+            ? `${files.length} Dateien bereit. „In Dateien sichern“ wählen, dann ${VAULT_PATH_IPHONE}, vorhandene ersetzen.`
+            : `${files.length} Dateien heruntergeladen. In den Vault-Ordner „Health App Export“ verschieben, vorhandene ersetzen.`,
       );
     } catch (e) {
       // Abbruch im Teilen-Menü ist kein Fehler
@@ -93,8 +147,16 @@ const VaultExport: React.FC = () => {
   return (
     <div className="space-y-2">
       <p className="text-sm text-slate-400">
-        Eine Markdown-Datei pro Monat mit allen Werten: Tage, Training, Ernährung, Körpermaße, Befinden. Ablage im Vault zum Beispiel unter Gesundheit/Recomp. Dateien werden immer ganz ersetzt.
+        Eine Markdown-Datei pro Monat mit allen Werten: Tage, Training, Ernährung, Körpermaße, Befinden. Dateien werden immer ganz ersetzt.
       </p>
+      <p className="text-[11px] text-slate-500 break-words">
+        Ziel im Vault: <span className="text-slate-300">01 marius privat / Sport&amp;Health / Health App Export</span>. iPhone: im Teilen-Menü „In Dateien sichern“, dann {VAULT_PATH_IPHONE}.
+      </p>
+      {canPickFolder() && (
+        <Button variant="ghost" className="w-full" onClick={pickFolder} disabled={busy}>
+          {dirName ? `Ordner: ${dirName} (ändern)` : 'Vault-Ordner verbinden (Mac, Chrome oder Edge)'}
+        </Button>
+      )}
       <Button variant="green" className="w-full" onClick={() => run(false)} disabled={busy}>
         {busy ? 'Erstelle Dateien …' : 'Jetzt in den Vault (aktueller und letzter Monat)'}
       </Button>

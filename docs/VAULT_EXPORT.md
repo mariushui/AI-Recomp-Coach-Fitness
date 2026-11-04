@@ -18,7 +18,12 @@ Die Datei wird bei jedem Export ganz ersetzt. Korrekturen in der App kommen so a
 
 Zahlen deutsch formatiert (Dezimalkomma, Tausenderpunkt).
 
+## Ablageort
+
+Am Mac: `/Users/mariushuinink/Library/Mobile Documents/iCloud~md~obsidian/Documents/Marius_Vault/01 marius privat/Sport&Health/Health App Export`
+Auf dem iPhone in der Dateien-App: Obsidian → Marius_Vault → 01 marius privat → Sport&Health → Health App Export.
+
 ## Wie es in den Vault kommt
 
-- **Jetzt, von Hand:** Einstellungen → Obsidian-Vault → „Jetzt in den Vault“. Aktueller und letzter Monat. Auf dem iPhone über das Teilen-Menü „In Dateien sichern“ in den Vault-Ordner in iCloud (zum Beispiel `Gesundheit/Recomp`), vorhandene ersetzen. Am Mac als Download.
+- **Jetzt, von Hand:** Einstellungen → Obsidian-Vault → „Jetzt in den Vault“. Aktueller und letzter Monat. Auf dem iPhone über das Teilen-Menü „In Dateien sichern“ in den Ordner „Health App Export“, vorhandene ersetzen. Am Mac in Chrome oder Edge einmal „Vault-Ordner verbinden“, danach schreibt der Export direkt in den Ordner. In Safari als Download.
 - **Später, automatisch:** Kurzbefehl nach dem Health-Abgleich. Dafür kommt eine Server-Funktion `vault-export` dazu, die dieselbe Funktion `monthFile` nutzt, und ein Kurzbefehl mit „Datei sichern“ in den Vault-Ordner. Geplant, wenn die App ein paar Wochen im Einsatz ist.
