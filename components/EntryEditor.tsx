@@ -1,3 +1,4 @@
+import { sumMicros } from '../lib/micros';
 import React, { useState } from 'react';
 import {
   KIND_LABEL,
@@ -63,6 +64,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
       const newItems = meals.flatMap((m) => m.items ?? []);
       if (newItems.length && !d.items?.length) next.items = newItems;
       next.confidence = meals[0].confidence;
+      next.micros = sumMicros(meals.map((m) => m.micros));
       for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
       onChange({ ...draft, data: next });
       setRecalc('done');

@@ -1,8 +1,15 @@
-// Kraft: Training starten, Wochenvolumen je Einheitstyp, harte Sätze je Muskelgruppe, Verlauf je Übung, Trainingshistorie.
+// Training: was laut Plan als Nächstes ansteht (antippen = Eingabe), Training ohne Plan, Fokus-Notizen für Tennis und Capoeira,
+// darunter Kraft: Wochenvolumen je Einheitstyp, harte Sätze je Muskelgruppe, Verlauf je Übung, Trainingshistorie.
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { SESSION_KINDS, SESSION_KIND_LABEL, type Entry, type SessionKind, type WorkoutData } from '../supabase/functions/_shared/domain';
-import { insertEntries, listStrengthHistory } from '../lib/entries';
+import { SESSION_KINDS, SESSION_KIND_LABEL, SPORT_LABEL, type Entry, type PlanData, type SessionKind, type Sport, type WorkoutData } from '../supabase/functions/_shared/domain';
+import { insertEntries, listEntries, listSkillHistory, listStrengthHistory } from '../lib/entries';
+import { listSlotOverrideIds, listSlots } from '../lib/planSlotsApi';
+import { expandSlots, visiblePlans } from '../lib/planTemplate';
+import { cacheTraining, cachedTraining, focusHistory, loadFocusList, loadTemplateMemory, matchTemplate, rememberTemplate, upcomingSessions } from '../lib/trainingPlan';
+import { formatTime, startOfDay } from '../lib/time';
+import SkillLogger, { loadSkillDraft, newSkillDraft, type SkillDraft } from './SkillLogger';
+import { SPORT_ICON } from './icons';
 import { MUSCLES, MUSCLE_LABEL, allExercises } from '../lib/exercises';
 import { bodyweightAt, exerciseHistory, isStrength, sessionKindOf, sessionSets, sessionVolume, setsOf, setsZone, summarizeSets, usedExercises, weeklyStrength } from '../lib/strength';
 import { cacheHistory, cachedHistory, loadDraft, loadTemplates } from '../lib/strengthTemplates';
@@ -27,6 +34,8 @@ const kg = (n: number) => `${Math.round(n).toLocaleString('de-DE')} kg`;
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
 const weekLabel = (wk: string) => new Date(wk + 'T12:00:00').toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' });
 
+const dayKeyOf = (iso: string) => new Date(iso).toDateString();
+
 const Title: React.FC<{ children: React.ReactNode; sub?: string }> = ({ children, sub }) => (
   <div>
     <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{children}</p>
@@ -34,7 +43,7 @@ const Title: React.FC<{ children: React.ReactNode; sub?: string }> = ({ children
   </div>
 );
 
-const StrengthView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ refreshKey, onSaved }) => {
+const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ refreshKey, onSaved }) => {
   const [entries, setEntries] = useState<Entry[]>(() => cachedHistory());
   const [offline, setOffline] = useState(false);
   const [logger, setLogger] = useState<StrengthDraft | null>(null);
@@ -42,20 +51,45 @@ const StrengthView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
   const [note, setNote] = useState<string | null>(null);
   const [kindsOn, setKindsOn] = useState<Set<SessionKind> | null>(null);
   const [exKey, setExKey] = useState<string | null>(null);
+  const [training, setTraining] = useState(() => cachedTraining());
+  const [skillLogger, setSkillLogger] = useState<SkillDraft | null>(null);
+  const [hasSkillDraft, setHasSkillDraft] = useState(() => !!loadSkillDraft());
+  const [pickFor, setPickFor] = useState<Entry<'plan'> | null>(null);
   const templates = useMemo(loadTemplates, [logger]);
   const exercises = useMemo(() => allExercises(), [logger]);
 
   useEffect(() => {
     // Erst Wartendes aus dem Keller senden, dann neu laden, sonst fehlt es im lokalen Zwischenspeicher
+    const from = addDays(startOfDay(new Date()), -1);
+    const to = addDays(startOfDay(new Date()), 15);
     flush(insertEntries)
-      .then(() => listStrengthHistory())
-      .then((list) => {
+      .then(() => Promise.all([listStrengthHistory(), listEntries(from, to), listSlots(), listSlotOverrideIds(), listSkillHistory()]))
+      .then(([list, range, slots, overrides, skill]) => {
         cacheHistory(list);
         setEntries(cachedHistory());
+        const t = { range: visiblePlans([...range.filter((e) => e.kind === 'plan' || e.kind === 'workout'), ...expandSlots(slots, range, from, to, overrides)]), skill };
+        cacheTraining(t);
+        setTraining(t);
         setOffline(false);
       })
       .catch(() => setOffline(true));
   }, [refreshKey]);
+
+  const upcoming = useMemo(() => upcomingSessions(training.range).slice(0, 10), [training]);
+  const memory = useMemo(loadTemplateMemory, [pickFor, logger]);
+
+  const openPlan = (plan: Entry<'plan'>) => {
+    const p = plan.data as PlanData;
+    if (p.sport === 'kraft') {
+      const t = matchTemplate(plan, templates, memory);
+      if (t) return setLogger(draftFromTemplate(t, entries));
+      return setPickFor(plan);
+    }
+    setSkillLogger(newSkillDraft(p.sport, plan, training.skill));
+  };
+  const startSkill = (sport: Sport) => setSkillLogger(newSkillDraft(sport, undefined, training.skill));
+  const savedNote = (queued: boolean) =>
+    setNote(queued ? `Gespeichert auf dem Gerät. Geht raus, sobald wieder Netz da ist (${queuedCount()} wartend).` : 'Training gespeichert.');
 
   const strength = useMemo(() => entries.filter(isStrength).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)), [entries]);
   const weeks = useMemo(() => {
@@ -106,35 +140,111 @@ const StrengthView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-display font-bold text-slate-100">Kraft</h2>
+        <h2 className="font-display font-bold text-slate-100">Training</h2>
         {offline && <span className="text-[11px] text-amber-300">ohne Netz, Werte vom Gerät</span>}
       </div>
       {note && <p className="rounded-xl bg-cyber-green/10 border border-cyber-green/30 px-3 py-2 text-xs text-slate-200">{note}</p>}
 
-      <Card className="space-y-3">
-        {hasDraft ? (
-          <button type="button" onClick={resume} className="w-full rounded-xl bg-cyber-green text-cyber-black py-3 font-bold">
-            Training fortsetzen
-          </button>
-        ) : (
-          <Title sub="Vorlage wählen. Werte der letzten Einheit stehen grau im Feld.">Training starten</Title>
-        )}
+      {(hasDraft || hasSkillDraft) && (
+        <button
+          type="button"
+          onClick={() => {
+            if (hasDraft) return resume();
+            const d = loadSkillDraft();
+            if (d) setSkillLogger(d);
+          }}
+          className="w-full rounded-xl bg-cyber-green text-cyber-black py-3 font-bold"
+        >
+          {hasDraft ? 'Krafttraining fortsetzen' : `${SPORT_LABEL[loadSkillDraft()?.sport ?? 'tennis']} fortsetzen`}
+        </button>
+      )}
+
+      <Card>
+        <Title sub={upcoming.length ? 'Aus deinem Trainingsplan. Antippen, um während des Trainings einzutragen.' : 'Im Plan steht für die nächsten 2 Wochen nichts. Wochenplan im Kalender anlegen.'}>
+          Als Nächstes
+        </Title>
+        <div className="mt-2">
+          {upcoming.map((s, i) => {
+            const p = s.plan.data as PlanData;
+            const Icon = SPORT_ICON[p.sport];
+            const t = p.sport === 'kraft' ? matchTemplate(s.plan, templates, memory) : undefined;
+            const today = dayKeyOf(s.plan.occurred_at) === dayKeyOf(new Date().toISOString());
+            return (
+              <button
+                key={s.plan.id}
+                type="button"
+                onClick={() => openPlan(s.plan)}
+                className={`w-full flex items-center gap-3 rounded-xl px-2 py-2.5 text-left ${i === 0 ? 'bg-cyber-purple/15 border border-cyber-purple/40' : 'border-t border-white/5'}`}
+              >
+                <Icon size={26} className={i === 0 ? 'text-cyber-purple' : 'text-slate-400'} />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-bold text-slate-100 truncate">{t?.name ?? (p.sport === 'sonstiges' ? p.sport_label : SPORT_LABEL[p.sport])}</span>
+                  <span className="block text-[11px] text-slate-500 truncate">
+                    {today ? 'Heute' : new Date(s.plan.occurred_at).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' })} {formatTime(s.plan.occurred_at)}
+                    {p.duration_min ? ` · ${p.duration_min} min` : ''}
+                    {p.focus && !t ? ` · ${p.focus}` : ''}
+                    {p.sport === 'kraft' && !t ? ' · Vorlage wählen' : ''}
+                  </span>
+                </span>
+                <span className={`text-xs font-bold shrink-0 ${i === 0 ? 'text-cyber-green' : 'text-slate-500'}`}>{i === 0 ? 'Start' : '›'}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card className="space-y-2">
+        <Title sub="Wenn du etwas trainierst, das nicht im Plan steht.">Ohne Plan</Title>
         <div className="grid grid-cols-2 gap-2">
           {templates.map((t) => (
-            <button key={t.id} type="button" onClick={() => start(t)} className="rounded-xl bg-cyber-black border border-white/10 px-3 py-3 text-left">
+            <button key={t.id} type="button" onClick={() => start(t)} className="rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-left">
               <span className="block text-sm font-bold text-slate-100 leading-tight">{t.name}</span>
               <span className="block text-[11px] mt-0.5" style={{ color: KIND_COLOR[t.kind] }}>
                 {SESSION_KIND_LABEL[t.kind]} · {t.exercises.length} Übungen
               </span>
             </button>
           ))}
-          <button type="button" onClick={() => start(null)} className="rounded-xl border border-dashed border-white/15 px-3 py-3 text-left">
-            <span className="block text-sm font-bold text-slate-300">Freies Training</span>
+          <button type="button" onClick={() => start(null)} className="rounded-xl border border-dashed border-white/15 px-3 py-2.5 text-left">
+            <span className="block text-sm font-bold text-slate-300">Kraft frei</span>
             <span className="block text-[11px] text-slate-500 mt-0.5">Übungen selbst wählen</span>
           </button>
+          {(['tennis', 'capoeira'] as Sport[]).map((sp) => {
+            const Icon = SPORT_ICON[sp];
+            return (
+              <button key={sp} type="button" onClick={() => startSkill(sp)} className="flex items-center gap-2 rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-left">
+                <Icon size={20} className="text-slate-400" />
+                <span className="text-sm font-bold text-slate-100">{SPORT_LABEL[sp]}</span>
+              </button>
+            );
+          })}
         </div>
       </Card>
 
+      {(['tennis', 'capoeira'] as Sport[]).map((sp) => {
+        const foci = loadFocusList(sp);
+        const rows = foci.map((f) => ({ f, notes: focusHistory(training.skill, f, 3) })).filter((r) => r.notes.length);
+        if (!rows.length) return null;
+        return (
+          <Card key={sp}>
+            <Title sub="Die letzten Notizen je Fokus, neueste oben.">{`${SPORT_LABEL[sp]}: Fokus-Verlauf`}</Title>
+            <div className="mt-2 space-y-3">
+              {rows.map((r) => (
+                <div key={r.f}>
+                  <p className="text-sm font-bold text-slate-100">{r.f}</p>
+                  {r.notes.map((n) => (
+                    <p key={n.at} className="text-xs text-slate-300 mt-0.5">
+                      <span className="text-slate-500">{new Date(n.at).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' })} </span>
+                      {n.note}
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })}
+
+      {strength.length > 0 && <h3 className="font-display font-bold text-slate-100 pt-2">Kraft</h3>}
       {strength.length > 0 && (
         <>
           <div className="grid grid-cols-3 gap-2">
@@ -309,13 +419,63 @@ const StrengthView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
             setLogger(null);
             setHasDraft(false);
             setEntries(cachedHistory());
-            setNote(queued ? `Gespeichert auf dem Gerät. Geht raus, sobald wieder Netz da ist (${queuedCount()} wartend).` : 'Training gespeichert.');
+            savedNote(queued);
             onSaved();
           }}
         />
+      )}
+
+      {skillLogger && (
+        <SkillLogger
+          initial={skillLogger}
+          history={training.skill}
+          onClose={() => {
+            setSkillLogger(null);
+            setHasSkillDraft(!!loadSkillDraft());
+          }}
+          onSaved={(queued) => {
+            setSkillLogger(null);
+            setHasSkillDraft(false);
+            savedNote(queued);
+            onSaved();
+          }}
+        />
+      )}
+
+      {pickFor && (
+        <div className="fixed inset-0 z-40 bg-black/70 flex items-end" onClick={() => setPickFor(null)}>
+          <div className="w-full max-w-xl mx-auto rounded-t-3xl bg-cyber-gray border-t border-white/10 p-4 pb-[max(env(safe-area-inset-bottom),16px)] space-y-2" onClick={(e) => e.stopPropagation()}>
+            <p className="font-bold text-slate-100">Welche Vorlage?</p>
+            <p className="text-xs text-slate-500">Die Wahl merkt sich die App für diese Einheit im Wochenplan.</p>
+            {templates.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  rememberTemplate(pickFor, t.id);
+                  setPickFor(null);
+                  setLogger(draftFromTemplate(t, entries));
+                }}
+                className="w-full rounded-xl bg-cyber-black border border-white/10 px-3 py-3 text-left text-sm font-bold text-slate-100"
+              >
+                {t.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setPickFor(null);
+                start(null);
+              }}
+              className="w-full rounded-xl border border-dashed border-white/15 px-3 py-3 text-left text-sm text-slate-300"
+            >
+              Frei, ohne Vorlage
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 };
 
-export default StrengthView;
+export default TrainingView;
