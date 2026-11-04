@@ -10,6 +10,8 @@ import {
 } from '../supabase/functions/_shared/domain';
 import { summarize } from '../lib/format';
 import { parseText } from '../lib/entries';
+import { SKINFOLD_LABEL, SKINFOLD_SITES, jacksonPollock7, skinfoldSum } from '../lib/bodyfat';
+import { ageFrom, loadProfile } from '../lib/profile';
 import { EntryIcon, Icons } from './icons';
 import { fromInputValue, toInputValue } from '../lib/time';
 import { Card, NumberField, ScaleField, SelectField, TextField, Label } from './ui';
@@ -74,6 +76,15 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
     const next = { ...d };
     if (value === undefined) delete next[key];
     else next[key] = value;
+    onChange({ ...draft, data: next });
+  };
+  // Mehrere Felder in einem Schritt, sonst überschreibt der zweite Aufruf den ersten
+  const setMany = (patch: Record<string, unknown>) => {
+    const next = { ...d };
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === undefined) delete next[k];
+      else next[k] = v;
+    }
     onChange({ ...draft, data: next });
   };
   const listText = (v: string[] | undefined) => (v ?? []).join(', ');
@@ -217,17 +228,7 @@ const EntryEditor: React.FC<Props> = ({ draft, onChange, onRemove, defaultOpen =
             </>
           )}
 
-          {draft.kind === 'body' && (
-            <div className="grid grid-cols-2 gap-3">
-              <NumberField label="Gewicht" unit="kg" step={0.1} value={d.weight_kg} onChange={(v) => set('weight_kg', v)} />
-              <NumberField label="Körperfett" unit="%" step={0.1} value={d.body_fat_pct} onChange={(v) => set('body_fat_pct', v)} />
-              <NumberField label="Taille" unit="cm" step={0.5} value={d.waist_cm} onChange={(v) => set('waist_cm', v)} />
-              <NumberField label="Muskeln (Waage)" unit="kg" step={0.1} value={d.muscle_kg} onChange={(v) => set('muscle_kg', v)} />
-              <div />
-              <NumberField label="Blutdruck sys." value={d.bp_systolic} onChange={(v) => set('bp_systolic', v)} />
-              <NumberField label="Blutdruck dia." value={d.bp_diastolic} onChange={(v) => set('bp_diastolic', v)} />
-            </div>
-          )}
+          {draft.kind === 'body' && <BodyFields d={d} set={set} setMany={setMany} />}
 
           {draft.kind === 'wellbeing' && (
             <>
@@ -298,6 +299,80 @@ const ExerciseList: React.FC<{ value: StrengthSet[]; onChange: (v: StrengthSet[]
       <button type="button" className="mt-2 text-xs text-cyber-purple" onClick={() => onChange([...value, { exercise: '' }])}>
         + Übung
       </button>
+    </div>
+  );
+};
+
+/** Körperwerte: Waage, Umfänge und 7-Punkte-Hautfalten mit Körperfett nach Jackson-Pollock 7. */
+const BodyFields: React.FC<{ d: any; set: (key: string, value: unknown) => void; setMany: (patch: Record<string, unknown>) => void }> = ({ d, set, setMany }) => {
+  const [foldsOpen, setFoldsOpen] = useState(!!d.skinfolds && Object.keys(d.skinfolds).length > 0);
+  const [age, setAge] = useState<number | undefined>();
+  React.useEffect(() => {
+    loadProfile()
+      .then((p) => setAge(ageFrom(p.birth_date)))
+      .catch(() => undefined);
+  }, []);
+  const folds = d.skinfolds ?? {};
+  const setFold = (k: string, v: number | undefined) => {
+    const next = { ...folds };
+    if (v === undefined) delete next[k];
+    else next[k] = v;
+    set('skinfolds', Object.keys(next).length ? next : undefined);
+  };
+  const sum = skinfoldSum(folds);
+  const jp7 = jacksonPollock7(folds, age);
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Gewicht" unit="kg" step={0.1} value={d.weight_kg} onChange={(v) => set('weight_kg', v)} />
+        <NumberField label="Körperfett" unit="%" step={0.1} value={d.body_fat_pct} onChange={(v) => set('body_fat_pct', v)} />
+        <NumberField label="Muskeln (Waage)" unit="kg" step={0.1} value={d.muscle_kg} onChange={(v) => set('muscle_kg', v)} />
+        <div />
+      </div>
+      <Label>Umfänge</Label>
+      <div className="grid grid-cols-2 gap-3 -mt-2">
+        <NumberField label="Taille" unit="cm" step={0.5} value={d.waist_cm} onChange={(v) => set('waist_cm', v)} />
+        <NumberField label="Brust" unit="cm" step={0.5} value={d.chest_cm} onChange={(v) => set('chest_cm', v)} />
+        <NumberField label="Hüfte" unit="cm" step={0.5} value={d.hip_cm} onChange={(v) => set('hip_cm', v)} />
+        <NumberField label="Oberarm" unit="cm" step={0.5} value={d.arm_cm} onChange={(v) => set('arm_cm', v)} />
+      </div>
+      <p className="text-[11px] text-slate-500 -mt-1">Taille auf Höhe des Bauchnabels, ausgeatmet. Brust über die Brustwarzen. Hüfte an der breitesten Stelle. Oberarm angespannt, dickste Stelle.</p>
+      <button type="button" onClick={() => setFoldsOpen(!foldsOpen)} className="text-xs font-bold text-cyber-purple">
+        {foldsOpen ? '− 7-Punkte-Hautfalten ausblenden' : '+ 7-Punkte-Hautfalten messen'}
+      </button>
+      {foldsOpen && (
+        <div className="rounded-xl bg-cyber-black/60 border border-white/5 p-3 space-y-3">
+          <p className="text-[11px] text-slate-400">Rechte Körperseite, Falte mit Daumen und Zeigefinger abheben, Zange 1 cm daneben ansetzen, nach 2 Sekunden ablesen. Je Punkt 2 Messungen, den Mittelwert eintragen.</p>
+          <div className="grid grid-cols-2 gap-3">
+            {SKINFOLD_SITES.map((k) => (
+              <div key={k}>
+                <NumberField label={SKINFOLD_LABEL[k].name} unit="mm" step={0.5} value={folds[k]} onChange={(v) => setFold(k, v)} />
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{SKINFOLD_LABEL[k].how}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-white/5 pt-2">
+            <span className="text-xs text-slate-300">
+              {sum !== undefined ? `Summe ${sum.toLocaleString('de-DE')} mm` : 'Summe erst bei 7 Werten'}
+              {jp7 !== undefined && <b className="text-cyber-green"> · {jp7.toLocaleString('de-DE')} % Körperfett</b>}
+              {sum !== undefined && age === undefined && <span className="block text-[10px] text-slate-500">Für den Körperfettwert unter Einstellungen das Geburtsdatum eintragen.</span>}
+            </span>
+            {jp7 !== undefined && d.body_fat_pct !== jp7 && (
+              <button
+                type="button"
+                className="shrink-0 rounded-lg bg-cyber-green/15 border border-cyber-green/40 px-2.5 py-1.5 text-xs font-bold text-cyber-green"
+                onClick={() => setMany({ body_fat_pct: jp7, body_fat_method: 'hautfalten' })}
+              >
+                Übernehmen
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Blutdruck sys." value={d.bp_systolic} onChange={(v) => set('bp_systolic', v)} />
+        <NumberField label="Blutdruck dia." value={d.bp_diastolic} onChange={(v) => set('bp_diastolic', v)} />
+      </div>
     </div>
   );
 };

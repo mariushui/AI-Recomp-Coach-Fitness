@@ -8,6 +8,7 @@ import { addDays } from '../lib/time';
 import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
 import { CHARTS, loadCharts, saveCharts } from '../lib/chartPrefs';
+import { MEASURE_OFF_KEY } from './MeasureReminder';
 import { Button, Card, ErrorBox, Label, NumberField, TextField } from './ui';
 
 const inputCls = 'w-full rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-base text-slate-100 focus:outline-none focus:border-cyber-purple';
@@ -33,6 +34,13 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
   const [birthDate, setBirthDate] = useState<string | undefined>();
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
+  const [measureReminder, setMeasureReminder] = useState(() => {
+    try {
+      return localStorage.getItem(MEASURE_OFF_KEY) !== '1';
+    } catch {
+      return true;
+    }
+  });
   const [pw1, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
   const [token, setToken] = useState<string | null>(null);
@@ -244,6 +252,25 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
             {c.label}
           </label>
         ))}
+        <label className="flex items-center gap-3 py-1 text-sm text-slate-200 border-t border-white/5 pt-3">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#8B5CF6]"
+            checked={measureReminder}
+            onChange={() => {
+              const on = !measureReminder;
+              try {
+                if (on) localStorage.removeItem(MEASURE_OFF_KEY);
+                else localStorage.setItem(MEASURE_OFF_KEY, '1');
+              } catch {
+                /* egal */
+              }
+              setMeasureReminder(on);
+              onDataChanged();
+            }}
+          />
+          Erinnerung an Umfänge und Hautfalten alle 14 Tage
+        </label>
       </Section>
 
       <Section title="Anmeldung">
