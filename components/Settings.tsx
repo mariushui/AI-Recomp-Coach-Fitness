@@ -9,6 +9,7 @@ import { insertEntries, listAllEntries } from '../lib/entries';
 import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
 import { CHART_LABEL, loadCharts, loadOrder, normalizeOrder, saveCharts, saveOrder } from '../lib/chartPrefs';
 import SortableList from './SortableList';
+import VaultExport from './VaultExport';
 import { MEASURE_OFF_KEY } from './MeasureReminder';
 import { Button, Card, ErrorBox, Label, NumberField, TextField } from './ui';
 
@@ -397,6 +398,10 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         <Button variant="ghost" onClick={importLegacy} disabled={!legacyJson}>
           Übernehmen
         </Button>
+      </Section>
+
+      <Section title="Obsidian-Vault">
+        <VaultExport />
       </Section>
 
       <Section title="Deine Daten">
