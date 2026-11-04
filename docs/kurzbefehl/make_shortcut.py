@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Erzeugt die Kurzbefehl-Datei "Recomp Health" als unsignierte .shortcut-Datei.
 
-Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--ohne-trainings] [--nur-stufe-1]
+Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--mit-trainings] [--nur-stufe-1]
 Danach auf dem Mac signieren:  mkdir -p signed && shortcuts sign --mode anyone --input "Recomp Health.shortcut" --output "signed/Recomp Health.shortcut"
 und per AirDrop aufs iPhone schicken.
 
@@ -137,7 +137,9 @@ flags = {a for a in sys.argv[1:] if a.startswith("--")}
 token = args[0] if len(args) > 0 else "rc_HIER_DEIN_TOKEN"
 url = args[1] if len(args) > 1 else "https://DEIN-PROJEKT.supabase.co/functions/v1/health-ingest"
 stufe2 = "--nur-stufe-1" not in flags
-mit_trainings = stufe2 and "--ohne-trainings" not in flags
+# Trainings erst einschalten, wenn die Kennung der Aktion "Trainings suchen" aus einem iOS-Export belegt ist.
+# Eine unbekannte Aktion bricht den ganzen Kurzbefehl ab (geprüft am iPhone, 4.11.2026).
+mit_trainings = stufe2 and "--mit-trainings" in flags
 
 metric_items = [
     sub("weight", [("values", "GW"), ("dates", "GD")]),
