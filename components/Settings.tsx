@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
-import { ageFrom, loadProfile, proteinBasis, saveProfile, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal } from '../lib/profile';
+import { ENERGY_MODES, ageFrom, loadProfile, proteinBasis, saveProfile, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal, type EnergyMode } from '../lib/profile';
 import { listEntries } from '../lib/entries';
 import { average, dailyStats } from '../lib/stats';
 import { addDays } from '../lib/time';
@@ -35,6 +35,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [muscle, setMuscle] = useState<number | undefined>(); // Muskelmasse laut Waage
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
   const [birthDate, setBirthDate] = useState<string | undefined>();
+  const [mode, setMode] = useState<EnergyMode | undefined>();
+  const [pct, setPct] = useState<number | undefined>();
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
   const [order, setOrder] = useState(loadOrder);
   const [measureReminder, setMeasureReminder] = useState(() => {
@@ -58,6 +60,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       .then((p) => {
         setName(p.display_name ?? undefined);
         setHeight(p.height_cm ?? undefined);
+        setMode(p.energy_mode ?? undefined);
+        setPct(p.kcal_adjust_pct ?? undefined);
         setProteinGoal(p.protein_goal_g ?? undefined);
         setKcalGoal(p.kcal_goal ?? undefined);
         setCarbsGoal(p.carbs_goal_g ?? undefined);
@@ -120,6 +124,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       const f = fatGoal === undefined ? null : Math.round(fatGoal);
       if (c !== null && (c < 20 || c > 800)) throw new Error('Kohlenhydrat-Ziel bitte zwischen 20 und 800 g.');
       if (f !== null && (f < 20 || f > 300)) throw new Error('Fett-Ziel bitte zwischen 20 und 300 g.');
+      if (pct !== undefined && (pct < -30 || pct > 25)) throw new Error('Kalorien-Anpassung bitte zwischen −30 und +25 %.');
       if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
       if (birthDate && (birthDate < '1900-01-01' || ageFrom(birthDate) === undefined || ageFrom(birthDate)! > 120)) throw new Error('Geburtsdatum bitte prüfen.');
       await saveProfile(session.user.id, {
@@ -130,6 +135,8 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         birth_date: birthDate ?? null,
         carbs_goal_g: c,
         fat_goal_g: f,
+        energy_mode: mode ?? null,
+        kcal_adjust_pct: pct === undefined ? null : Math.round(pct),
       });
       setCarbsGoal(c ?? undefined);
       setFatGoal(f ?? undefined);
@@ -297,6 +304,66 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         </div>
         <Button variant="ghost" onClick={savePassword} disabled={pw1.length < 8}>
           Passwort speichern
+        </Button>
+      </Section>
+
+      <Section title="Ziel">
+        <p className="text-sm text-slate-400">Wählt, wie weit dein Kalorienziel unter oder über deinem Tagesverbrauch liegt. Der Verbrauch kommt aus Grundumsatz und Bewegung des Tages. Protein bleibt bei 2 g je kg Magermasse.</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(Object.keys(ENERGY_MODES) as EnergyMode[]).map((k) => {
+            const m = ENERGY_MODES[k];
+            const on = mode === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => {
+                  setMode(k);
+                  setPct(m.pct);
+                }}
+                aria-pressed={on}
+                className={`rounded-xl border px-3 py-2.5 text-left ${on ? 'border-cyber-green bg-cyber-green/10' : 'border-white/10 bg-cyber-black'}`}
+              >
+                <span className={`block text-sm font-bold ${on ? 'text-cyber-green' : 'text-slate-100'}`}>{m.label}</span>
+                <span className="block text-[11px] text-slate-500">
+                  {m.pct > 0 ? '+' : m.pct < 0 ? '−' : '±'}
+                  {Math.abs(m.pct)} % kcal
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {mode && (
+          <div className="rounded-xl bg-cyber-black/60 px-3 py-2.5 space-y-2">
+            <p className="text-xs text-slate-300">{ENERGY_MODES[mode].text}</p>
+            <p className="text-xs text-slate-400">Richtwert: {ENERGY_MODES[mode].rate}.</p>
+            <label className="flex items-center gap-3">
+              <span className="flex-1 text-sm text-slate-200">Kalorien zum Verbrauch</span>
+              <input
+                type="range"
+                min={ENERGY_MODES[mode].min}
+                max={ENERGY_MODES[mode].max}
+                step={1}
+                value={pct ?? ENERGY_MODES[mode].pct}
+                onChange={(e) => setPct(Number(e.target.value))}
+                className="w-32 accent-[#ADFF2F]"
+                aria-label="Kalorien-Anpassung in Prozent"
+              />
+              <span className="w-14 text-right text-sm font-bold tabular-nums text-slate-100">
+                {(pct ?? ENERGY_MODES[mode].pct) > 0 ? '+' : ''}
+                {pct ?? ENERGY_MODES[mode].pct} %
+              </span>
+            </label>
+            {leanMass !== undefined && (
+              <p className="text-[11px] text-slate-500">
+                Bei Ø Verbrauch von {suggestedKcalGoal(leanMass, activeKcal)?.toLocaleString('de-DE')} kcal heißt das etwa{' '}
+                {(Math.round(((suggestedKcalGoal(leanMass, activeKcal) ?? 0) * (1 + (pct ?? ENERGY_MODES[mode].pct) / 100)) / 50) * 50).toLocaleString('de-DE')} kcal am Tag. Quellen: Helms 2014, Iraki 2019 (docs/literatur).
+              </p>
+            )}
+          </div>
+        )}
+        <Button variant="ghost" onClick={saveName}>
+          Speichern
         </Button>
       </Section>
 
