@@ -40,6 +40,7 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
   }
   const healthWeight = new Map<string, number>();
   const healthFat = new Map<string, number>();
+  const healthLean = new Map<string, number>();
   const sorted = [...entries].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
 
   for (const e of sorted) {
@@ -73,6 +74,7 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
         const h = e.data as HealthData;
         if (h.metric === 'weight') healthWeight.set(k, h.value);
         if (h.metric === 'body_fat') healthFat.set(k, h.value);
+        if (h.metric === 'lean_mass') healthLean.set(k, h.value);
         if (h.metric === 'sleep') s.sleepH = Math.round((h.value / 60) * 10) / 10;
         if (h.metric === 'hrv') s.hrv = h.value;
         if (h.metric === 'resting_hr') s.restingHr = h.value;
@@ -93,6 +95,8 @@ export function dailyStats(entries: Entry[], from: Date, to: Date): DayStats[] {
       s.leanMass = Math.round(s.weight * (1 - s.bodyFat / 100) * 10) / 10;
       s.fatMass = Math.round(s.weight * (s.bodyFat / 100) * 10) / 10;
     }
+    // Magere Masse direkt von der Waage hat Vorrang vor der Rechnung, wenn kein manueller KFA eingetragen ist
+    if (healthLean.has(s.day) && s.leanMass === undefined) s.leanMass = healthLean.get(s.day);
     for (const k of ['protein', 'kcal', 'carbs', 'fat'] as const) if (s[k] !== undefined) s[k] = Math.round(s[k]!);
   }
   return [...days.values()];

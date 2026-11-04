@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Erzeugt die Kurzbefehl-Datei "Recomp Health" als unsignierte .shortcut-Datei.
 
-Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--mit-trainings] [--nur-stufe-1]
+Aufruf:  python3 make_shortcut.py TOKEN ADRESSE [--mit-schwimmen] [--mit-blutzucker] [--nur-stufe-1]
 Danach auf dem Mac signieren:  mkdir -p signed && shortcuts sign --mode anyone --input "Recomp Health.shortcut" --output "signed/Recomp Health.shortcut"
 und per AirDrop aufs iPhone schicken.
 
@@ -157,15 +157,40 @@ def summed_block(sample_type, prefix, limit=1500, days=2):
     d = detail(f, "Start Date"); setvar(prefix + "D", d, "Startdatum")
     q = detail(f, "Source"); setvar(prefix + "Q", q, "Quelle")
 
+# Typnamen wie in der englischen Health-App. Belegt am iPhone: Weight, Body Fat Percentage, Resting Heart Rate,
+# Heart Rate Variability, Sleep, Steps, Active Calories, Exercise Minutes. Die übrigen sind abgeleitet: Ist einer
+# falsch, zeigt die Suche nach dem Import "Steps" und muss von Hand korrigiert werden.
+SUMMED_TYPES = [
+    # (Typ, Präfix der Variablen, Schlüssel im Paket)
+    ("Steps", "T", "steps"),
+    ("Active Calories", "A", "active_kcal"),
+    ("Exercise Minutes", "E", "exercise_min"),
+    ("Walking + Running Distance", "L", "distance_walk_run"),
+    ("Cycling Distance", "C", "distance_cycling"),
+]
+# Ohne Daten zeigt Kurzbefehle bei jedem Lauf "Keine Messungen gefunden" und wartet auf OK. Deshalb nur auf Wunsch.
+if "--mit-schwimmen" in flags:
+    SUMMED_TYPES += [("Swimming Distance", "N", "distance_swim"), ("Swimming Strokes", "Z", "swim_strokes")]
+POINT_TYPES = [
+    # (Typ, Variable Wert, Variable Datum, Schlüssel, Anzahl)
+    ("Blood Oxygen", "OW", "OD", "spo2", 40),
+    ("Cardio Recovery", "CRW", "CRD", "hr_recovery", 10),
+    ("Respiratory Rate", "AFW", "AFD", "resp_rate", 40),
+    ("Wrist Temperature", "WTW", "WTD", "wrist_temp", 10),
+    ("Cardio Fitness", "VW", "VD", "vo2max", 5),
+    ("Body Mass Index", "BMW", "BMD", "bmi", 10),
+    ("Lean Body Mass", "MMW", "MMD", "lean_mass", 10),
+]
+if "--mit-blutzucker" in flags:  # erst mit Sensor sinnvoll
+    POINT_TYPES.append(("Blood Glucose", "BZW", "BZD", "glucose", 300))
+
 if stufe2:
-    summed_block("Steps", "T")
-    summed_block("Active Calories", "A")
-    summed_block("Exercise Minutes", "E")
-    metric_items += [
-        sub("steps", [("values", "TW"), ("dates", "TD"), ("sources", "TQ")]),
-        sub("active_kcal", [("values", "AW"), ("dates", "AD"), ("sources", "AQ")]),
-        sub("exercise_min", [("values", "EW"), ("dates", "ED"), ("sources", "EQ")]),
-    ]
+    for typ, prefix, key in SUMMED_TYPES:
+        summed_block(typ, prefix)
+        metric_items.append(sub(key, [("values", prefix + "W"), ("dates", prefix + "D"), ("sources", prefix + "Q")]))
+    for typ, vw, vd, key, limit in POINT_TYPES:
+        point_block(typ, vw, vd, limit=limit)
+        metric_items.append(sub(key, [("values", vw), ("dates", vd)]))
 
 metrics = dict_of(metric_items)
 metrics["WFKey"] = plain("metrics")

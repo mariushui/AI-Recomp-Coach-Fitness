@@ -37,6 +37,15 @@ const HEALTH_LABEL: Record<string, string> = {
   steps: 'Schritte',
   active_kcal: 'Aktive Kalorien',
   workout: 'Workout',
+  distance_walk_run: 'Gehen und Laufen',
+  distance_cycling: 'Rad',
+  distance_swim: 'Schwimmen',
+  swim_strokes: 'Schwimmzüge',
+  glucose: 'Blutzucker',
+  bmi: 'BMI',
+  resp_rate: 'Atemfrequenz',
+  wrist_temp: 'Handgelenktemperatur',
+  lean_mass: 'Magere Masse',
 };
 
 const j = (parts: (string | false | undefined | null)[]) => parts.filter(Boolean).join(' · ');
@@ -126,7 +135,7 @@ export function entryTitle(e: Pick<Entry, 'kind' | 'data'>): string {
   return KIND_LABEL[e.kind];
 }
 
-const HEALTH_ORDER = ['sleep', 'hrv', 'resting_hr', 'hr_recovery', 'spo2', 'vo2max', 'steps', 'active_kcal', 'exercise_min', 'weight', 'body_fat', 'workout'];
+const HEALTH_ORDER = ['sleep', 'hrv', 'resting_hr', 'resp_rate', 'wrist_temp', 'hr_recovery', 'spo2', 'vo2max', 'steps', 'active_kcal', 'exercise_min', 'distance_walk_run', 'distance_cycling', 'distance_swim', 'swim_strokes', 'weight', 'body_fat', 'lean_mass', 'bmi', 'glucose', 'workout'];
 
 /** Alle Apple-Health-Werte eines Tages in einer Zeile: "Schlaf 7 h 32 · HRV 58 ms · Ruhepuls 51 · 9.400 Schritte" */
 export function healthLine(entries: Pick<Entry<'health'>, 'data'>[]): string {

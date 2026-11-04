@@ -44,7 +44,7 @@ export interface HealthParseResult {
   warnings: string[];
 }
 
-type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2' | 'hr_recovery';
+type PointMetric = 'weight' | 'body_fat' | 'resting_hr' | 'hrv' | 'vo2max' | 'spo2' | 'hr_recovery' | 'glucose' | 'bmi' | 'resp_rate' | 'wrist_temp' | 'lean_mass';
 
 const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' | 'mean'; min: number; max: number }> = {
   weight: { unit: 'kg', pick: 'first', min: 25, max: 300 }, // erste Messung des Tages = morgens
@@ -54,6 +54,11 @@ const POINT_METRICS: Record<PointMetric, { unit: string; pick: 'first' | 'last' 
   vo2max: { unit: 'ml/kg/min', pick: 'last', min: 10, max: 95 },
   spo2: { unit: '%', pick: 'mean', min: 70, max: 100 },
   hr_recovery: { unit: 'bpm', pick: 'last', min: 3, max: 100 }, // Cardio-Erholung: Pulsabfall 1 min nach dem Training
+  glucose: { unit: 'mg/dL', pick: 'mean', min: 20, max: 600 }, // Tagesmittel, Werte unter 35 gelten als mmol/L und werden umgerechnet
+  bmi: { unit: '', pick: 'first', min: 10, max: 60 },
+  resp_rate: { unit: '/min', pick: 'mean', min: 4, max: 40 },
+  wrist_temp: { unit: '°C', pick: 'mean', min: -5, max: 45 }, // je nach iOS absolut oder als Abweichung
+  lean_mass: { unit: 'kg', pick: 'first', min: 20, max: 150 },
 };
 
 /** Liest eine Liste aus Text (Zeilen) oder Array. */
@@ -191,6 +196,7 @@ function parsePointMetric(metric: PointMetric, block: any, warnings: string[], t
     }
     // Körperfett kommt je nach Kurzbefehl als 0,18 oder 18
     if ((metric === 'body_fat' || metric === 'spo2') && v > 0 && v <= 1) v = v * 100;
+    if (metric === 'glucose' && v < 35) v = v * 18; // mmol/L nach mg/dL
     if (v < cfg.min || v > cfg.max) {
       warnings.push(`${metric}: Wert ${v} außerhalb des plausiblen Bereichs. Übersprungen.`);
       return;
@@ -304,16 +310,11 @@ function parseSleep(block: any, warnings: string[], tz: string): HealthRow[] {
   return rows;
 }
 
-/**
- * Schritte: iPhone und Watch zählen parallel. Pro Tag wird je Quelle summiert
- * und die Quelle mit den meisten Schritten genommen. Ohne Quellenangabe wird alles summiert.
- */
-function parseSteps(block: any, warnings: string[], tz: string): HealthRow[] {
-  return parseSummed('steps', 'Schritte', block, warnings, tz);
-}
-
 /** Tagessumme je Quelle, die größte Quelle zählt (Schritte, aktive Kalorien, Trainingsminuten). */
-function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: string, block: any, warnings: string[], tz: string): HealthRow[] {
+type SummedMetric = 'steps' | 'active_kcal' | 'exercise_min' | 'distance_walk_run' | 'distance_cycling' | 'distance_swim' | 'swim_strokes';
+const SUMMED: Record<SummedMetric, string> = { steps: 'Schritte', active_kcal: 'kcal', exercise_min: 'min', distance_walk_run: 'km', distance_cycling: 'km', distance_swim: 'm', swim_strokes: 'Züge' };
+
+function parseSummed(metric: SummedMetric, unit: string, block: any, warnings: string[], tz: string): HealthRow[] {
   const values = toList(block?.values);
   const dates = toList(block?.dates);
   const sources = toList(block?.sources);
@@ -343,7 +344,8 @@ function parseSummed(metric: 'steps' | 'active_kcal' | 'exercise_min', unit: str
   });
   const rows: HealthRow[] = [];
   for (const [day, info] of perDay) {
-    const value = Math.round(Math.max(...info.bySource.values()));
+    const max = Math.max(...info.bySource.values());
+    const value = unit === 'km' ? Math.round(max * 100) / 100 : Math.round(max);
     rows.push({ metric, day, occurred_at: info.lastIso, external_id: `${metric}:${day}`, data: { metric, value, unit } });
   }
   return rows;
@@ -457,11 +459,11 @@ export function parseHealthPayload(body: any): HealthParseResult {
     if (metrics[m]) rows.push(...parsePointMetric(m, metrics[m], warnings, tz));
   }
   if (metrics.sleep) rows.push(...parseSleep(metrics.sleep, warnings, tz));
-  if (metrics.steps) rows.push(...parseSteps(metrics.steps, warnings, tz));
-  if (metrics.active_kcal) rows.push(...parseSummed('active_kcal', 'kcal', metrics.active_kcal, warnings, tz));
-  if (metrics.exercise_min) rows.push(...parseSummed('exercise_min', 'min', metrics.exercise_min, warnings, tz));
+  for (const m of Object.keys(SUMMED) as SummedMetric[]) {
+    if (metrics[m]) rows.push(...parseSummed(m, SUMMED[m], metrics[m], warnings, tz));
+  }
   for (const k of Object.keys(metrics)) {
-    if (!(k in POINT_METRICS) && !['sleep', 'steps', 'active_kcal', 'exercise_min'].includes(k)) warnings.push(`Unbekannte Kennzahl "${k}" ignoriert.`);
+    if (!(k in POINT_METRICS) && k !== 'sleep' && !(k in SUMMED)) warnings.push(`Unbekannte Kennzahl "${k}" ignoriert.`);
   }
   // Trainings: "workouts" plus Kandidaten "workouts2" (zwei Varianten im Kurzbefehl, eine davon liefert).
   const workouts: WorkoutRow[] = [];

@@ -139,6 +139,15 @@ export const HEALTH_METRICS = [
   'steps',
   'active_kcal',
   'exercise_min',
+  'distance_walk_run', // km
+  'distance_cycling', // km
+  'distance_swim', // m
+  'swim_strokes',
+  'glucose', // mg/dL
+  'bmi',
+  'resp_rate', // Atemzüge pro Minute
+  'wrist_temp', // °C, nachts am Handgelenk
+  'lean_mass', // kg, magere Körpermasse laut Waage
   'sleep',
   'workout',
 ] as const;
