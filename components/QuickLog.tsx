@@ -9,6 +9,7 @@ import type { PlanData } from '../supabase/functions/_shared/domain';
 import { EntryIcon, Icons } from './icons';
 import { dayKey, localIso } from '../lib/time';
 import EntryEditor, { type Draft } from './EntryEditor';
+import SwipeToDelete from './SwipeToDelete';
 import { Button, Card, ErrorBox } from './ui';
 import TodayBar from './TodayBar';
 
@@ -260,13 +261,14 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
         <div className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Prüfen und speichern</p>
           {drafts.map((d, i) => (
-            <EntryEditor
-              key={i}
-              draft={d}
-              defaultOpen={d.manual}
-              onChange={(nd) => setDrafts((prev) => prev.map((x, j) => (j === i ? nd : x)))}
-              onRemove={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}
-            />
+            <SwipeToDelete key={i} onDelete={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}>
+              <EntryEditor
+                draft={d}
+                defaultOpen={d.manual}
+                onChange={(nd) => setDrafts((prev) => prev.map((x, j) => (j === i ? nd : x)))}
+                onRemove={() => setDrafts((prev) => prev.filter((_, j) => j !== i))}
+              />
+            </SwipeToDelete>
           ))}
           {drafts.some((d) => d.kind === 'plan') && (
             <label className="flex items-start gap-3 rounded-xl bg-cyber-purple/10 border border-cyber-purple/30 px-3 py-3">
