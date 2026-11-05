@@ -181,7 +181,7 @@ function App() {
       <header className="sticky top-0 z-10 bg-cyber-black/90 backdrop-blur px-4 pt-[max(env(safe-area-inset-top),12px)] pb-3 border-b border-white/5">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <h1 className="font-display text-lg font-bold">
-            Chakka
+            Chak<span className="text-cyber-green">ka</span>
           </h1>
           <button
             type="button"
