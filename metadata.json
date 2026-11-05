@@ -1,5 +1,5 @@
 {
-  "name": "Recomp Coach",
+  "name": "Chakka",
   "description": "Erfasst Mahlzeiten, Trainings (Tennis, Laufen, Capoeira, Kraft), Befinden und Apple-Health-Werte per Sprache oder Text. Daten liegen in Supabase. Regeln für Änderungen: AGENTS.md.",
   "requestFramePermissions": [
     "microphone"
