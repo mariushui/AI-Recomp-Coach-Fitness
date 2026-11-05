@@ -15,6 +15,7 @@ import SwipeToDelete from './SwipeToDelete';
 import MeasureReminder from './MeasureReminder';
 import { Button, Card, ErrorBox } from './ui';
 import TodayBar from './TodayBar';
+import SyncHint from './SyncHint';
 
 const DRAFT_KEY = 'recomp_quicklog_text';
 
@@ -215,6 +216,7 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
   return (
     <div className="space-y-4">
       <MeasureReminder refreshKey={refreshKey} onMeasure={() => setDrafts((prev) => [...prev, { kind: 'body', occurred_at: localIso(), data: {}, manual: true }])} />
+      <SyncHint refreshKey={refreshKey} />
       <TodayBar refreshKey={refreshKey} />
       <Card>
         <div className="relative">

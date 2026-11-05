@@ -10,12 +10,13 @@ import { LEGACY_HISTORY_KEY, convertLegacyHistory } from '../lib/legacy';
 import { CHART_LABEL, loadCharts, loadOrder, normalizeOrder, saveCharts, saveOrder } from '../lib/chartPrefs';
 import SortableList from './SortableList';
 import VaultExport from './VaultExport';
+import { SHORTCUT_NAME, SHORTCUT_URL, ageText, lastSync } from '../lib/syncStatus';
 import { MEASURE_OFF_KEY } from './MeasureReminder';
 import { Button, Card, ErrorBox, Label, NumberField, TextField } from './ui';
 
 const inputCls = 'w-full rounded-xl bg-cyber-black border border-white/10 px-3 py-2.5 text-base text-slate-100 focus:outline-none focus:border-cyber-purple';
 const GUIDE_URL = 'https://github.com/mariushui/AI-Recomp-Coach-Fitness/blob/main/docs/KURZBEFEHL.md';
-export const SHORTCUT_NAME = 'Recomp Health';
+export { SHORTCUT_NAME };
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <Card className="space-y-3">
@@ -25,6 +26,10 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
 );
 
 const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ session, onDataChanged }) => {
+  const [syncedAt, setSyncedAt] = useState<Date | undefined | null>(null);
+  useEffect(() => {
+    lastSync().then(setSyncedAt).catch(() => setSyncedAt(null));
+  }, []);
   const [name, setName] = useState<string | undefined>();
   const [height, setHeight] = useState<number | undefined>();
   const [proteinGoal, setProteinGoal] = useState<number | undefined>();
@@ -499,13 +504,14 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
             {copied === 'export' ? 'Kopiert' : 'Adresse kopieren'}
           </Button>
         </div>
+        {syncedAt !== null && <p className="text-sm text-slate-300">Letzter Abgleich: {ageText(syncedAt)}</p>}
         <div className="flex gap-2">
           <a href={GUIDE_URL} target="_blank" rel="noreferrer" className="flex-1">
             <Button variant="ghost" className="w-full">
               Anleitung
             </Button>
           </a>
-          <a href={`shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`} className="flex-1">
+          <a href={SHORTCUT_URL} className="flex-1">
             <Button className="w-full">Jetzt syncen</Button>
           </a>
         </div>
