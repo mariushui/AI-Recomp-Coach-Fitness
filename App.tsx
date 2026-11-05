@@ -12,6 +12,7 @@ import { insertEntries, listStrengthHistory } from './lib/entries';
 import { cacheHistory } from './lib/strengthTemplates';
 import { flush, queuedCount } from './lib/offlineQueue';
 import { dayKey } from './lib/time';
+import { runJobs } from './lib/backgroundJobs';
 
 const loadTrends = () => import('./components/Trends');
 const loadStrength = () => import('./components/TrainingView');
@@ -51,6 +52,11 @@ function App() {
   const [waiting, setWaiting] = useState(() => queuedCount());
   // Tag der Anzeige. Wechselt er (App lag über Nacht im Speicher), startet die Ansicht neu und zeigt wieder heute.
   const [dayStamp, setDayStamp] = useState(() => dayKey(new Date()));
+  // Zum Aktualisieren nach unten ziehen (am Seitenanfang)
+  const [pull, setPull] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const PULL_TRIGGER = 70;
+  const pullRef = React.useRef({ y0: 0, active: false, dist: 0 });
   const bump = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setWaiting(queuedCount());
@@ -91,6 +97,50 @@ function App() {
       clearTimeout(t);
     };
   }, [session]);
+
+  useEffect(() => {
+    const st = pullRef.current;
+    const start = (e: TouchEvent) => {
+      st.active = window.scrollY <= 0 && e.touches.length === 1;
+      st.y0 = e.touches[0].clientY;
+      st.dist = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (!st.active) return;
+      const d = e.touches[0].clientY - st.y0;
+      if (d <= 0 || window.scrollY > 0) {
+        st.dist = 0;
+        setPull(0);
+        return;
+      }
+      st.dist = Math.min(d * 0.5, 100);
+      setPull(st.dist);
+    };
+    const end = () => {
+      if (!st.active) return;
+      const fired = st.dist >= PULL_TRIGGER;
+      st.active = false;
+      st.dist = 0;
+      setPull(0);
+      if (!fired) return;
+      setRefreshing(true);
+      setDayStamp(dayKey(new Date()));
+      setRefreshKey((k) => k + 1);
+      void flush(insertEntries).then(() => setWaiting(queuedCount())).catch(() => undefined);
+      void runJobs().catch(() => undefined);
+      setTimeout(() => setRefreshing(false), 900);
+    };
+    window.addEventListener('touchstart', start, { passive: true });
+    window.addEventListener('touchmove', move, { passive: true });
+    window.addEventListener('touchend', end);
+    window.addEventListener('touchcancel', end);
+    return () => {
+      window.removeEventListener('touchstart', start);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', end);
+      window.removeEventListener('touchcancel', end);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isConfigured) return setReady(true);
@@ -146,6 +196,13 @@ function App() {
         {waiting > 0 && <p className="text-[11px] text-amber-300 mt-0.5">{waiting} {waiting === 1 ? 'Eintrag wartet' : 'Einträge warten'} auf Netz</p>}
       </header>
 
+      {(pull > 0 || refreshing) && (
+        <div className="fixed top-[max(env(safe-area-inset-top),12px)] inset-x-0 z-20 flex justify-center pointer-events-none" style={{ transform: `translateY(${refreshing ? 48 : pull * 0.6}px)` }}>
+          <span className="rounded-full bg-cyber-gray border border-white/10 px-3 py-1 text-xs text-slate-300">
+            {refreshing ? 'Aktualisiere …' : pull >= PULL_TRIGGER ? 'Loslassen zum Aktualisieren' : 'Zum Aktualisieren ziehen'}
+          </span>
+        </div>
+      )}
       <main key={dayStamp} className="max-w-xl mx-auto px-4 pt-4">
         {tab === 'log' && <QuickLog onSaved={bump} refreshKey={refreshKey} />}
         {tab === 'nutrition' && (
