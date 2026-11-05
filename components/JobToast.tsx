@@ -25,11 +25,15 @@ const JobToast: React.FC<{ onDone: () => void }> = ({ onDone }) => {
     // Offenes vom letzten Mal weitermachen, und wieder, sobald Netz da ist
     void runJobs();
     const online = () => void runJobs();
+    // iOS pausiert die App im Hintergrund. Kommt sie zurück, geht es dort weiter, wo es stehen blieb.
+    const visible = () => document.visibilityState === 'visible' && void runJobs();
     window.addEventListener('online', online);
+    document.addEventListener('visibilitychange', visible);
     return () => {
       off();
       clearTimeout(timer);
       window.removeEventListener('online', online);
+      document.removeEventListener('visibilitychange', visible);
     };
   }, [onDone]);
 

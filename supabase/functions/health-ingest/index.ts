@@ -124,9 +124,9 @@ async function upsertWorkout(admin: ReturnType<typeof createClient>, userId: str
     .neq('source', 'health')
     .gte('occurred_at', new Date(start - 36 * 3600_000).toISOString())
     .lte('occurred_at', new Date(start + 36 * 3600_000).toISOString());
-  // Eingaben aus der Training-Seite tragen kraft:… oder training:… als Kennung (gegen Doppelspeichern ohne Netz).
+  // Eingaben aus der App tragen kraft:, training:, app: oder parse: als Kennung (gegen Doppelspeichern ohne Netz).
   // Sie werden zusammengeführt, behalten aber ihre Kennung, damit ein späterer Versand aus der Warteschlange nichts doppelt anlegt.
-  const ownId = (id: string | null) => !id || /^(kraft|training):/.test(id);
+  const ownId = (id: string | null) => !id || /^(kraft|training|app|parse):/.test(id);
   const manual = (candidates ?? []).find(
     (c: any) => ownId(c.external_id) && c.occurred_at.slice(0, 10) === w.occurred_at.slice(0, 10) && sameSport(c.data as WorkoutData, w.data),
   );

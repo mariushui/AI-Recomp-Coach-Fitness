@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { EntryKind, EntrySource, NewEntry } from '../supabase/functions/_shared/domain';
 import { normalizeData } from '../supabase/functions/_shared/domain';
-import { insertEntries, parseText } from '../lib/entries';
+import { parseText } from '../lib/entries';
+import { saveEntries } from '../lib/saveEntries';
 import { addParseJob, subscribeJobs } from '../lib/backgroundJobs';
 import { prepareImage, type PreparedImage } from '../lib/image';
 import { insertSlots } from '../lib/planSlotsApi';
@@ -186,11 +187,13 @@ const QuickLog: React.FC<{ onSaved: () => void; refreshKey?: number }> = ({ onSa
         setError('Keine vollständigen Einträge. Bitte Werte ergänzen.');
         return;
       }
-      await insertEntries(rows);
+      // Feste Kennungen und Zeitlimit: kommt die Antwort des Servers nicht an, geht der Eintrag in die Warteschlange
+      // und wird beim nächsten Versuch nicht doppelt angelegt.
+      const { queued } = rows.length ? await saveEntries(rows) : { queued: false };
       await insertSlots(slotsFromDrafts(templatePlans, dayKey(new Date())));
       setSaved(
         [
-          rows.length && `${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} gespeichert.`,
+          rows.length && (queued ? `${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} auf dem Gerät gespeichert, wird gesendet, sobald das Netz antwortet.` : `${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'} gespeichert.`),
           templatePlans.length && `${templatePlans.length} Einheiten im Trainingsplan. Bearbeiten unter Kalender > Trainingsplan.`,
         ]
           .filter(Boolean)
