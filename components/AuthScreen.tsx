@@ -70,8 +70,8 @@ const AuthScreen: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center p-5">
       <Card className="w-full max-w-sm space-y-4">
         <div>
-          <h1 className="font-display text-2xl font-bold text-slate-100">Recomp Coach</h1>
-          <p className="text-sm text-slate-400 mt-1">Gesundheit, Körper und Training an einem Ort sammeln.</p>
+          <h1 className="font-display text-2xl font-bold text-slate-100">Chakka</h1>
+          <p className="text-sm text-slate-400 mt-1">Der Fitness-Tracker für Körper, Ernährung und Training.</p>
         </div>
 
         {mode === 'password' && (

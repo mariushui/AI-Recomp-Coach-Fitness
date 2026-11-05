@@ -62,7 +62,7 @@ export function monthFile(entries: Entry[], month: string, now: Date = new Date(
     'typ: gesundheit-recomp',
     `monat: ${month}`,
     `stand: ${dayKey(now)} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
-    'quelle: Recomp Coach',
+    'quelle: Chakka',
     `gewicht_kg_mittel: ${n(mean(days.map((d) => d.weight)), 1) || 'leer'}`,
     `kfa_prozent_mittel: ${n(mean(days.map((d) => d.bodyFat)), 1) || 'leer'}`,
     `schlaf_h_mittel: ${n(mean(days.map((d) => d.sleepH)), 1) || 'leer'}`,
@@ -75,7 +75,7 @@ export function monthFile(entries: Entry[], month: string, now: Date = new Date(
     '',
     `# Recomp ${month}`,
     '',
-    'Automatisch erzeugt aus Recomp Coach. Bei jedem Export ganz überschrieben, Änderungen hier gehen verloren.',
+    'Automatisch erzeugt aus Chakka. Bei jedem Export ganz überschrieben, Änderungen hier gehen verloren.',
     '',
   ];
 
