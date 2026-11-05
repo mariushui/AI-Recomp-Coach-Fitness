@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, functionsUrl } from '../lib/supabase';
-import { ENERGY_MODES, ageFrom, loadProfile, proteinBasis, saveProfile, suggestedKcalGoal, suggestedMacroGoals, suggestedProteinGoal, type EnergyMode } from '../lib/profile';
+import { ENERGY_MODES, ageFrom, hrZoneRanges, loadProfile, maxHeartRate, modeGoals, proteinBasis, saveProfile, suggestedKcalGoal, type EnergyMode } from '../lib/profile';
 import { listEntries } from '../lib/entries';
 import { average, dailyStats } from '../lib/stats';
 import { addDays } from '../lib/time';
@@ -35,6 +35,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const [muscle, setMuscle] = useState<number | undefined>(); // Muskelmasse laut Waage
   const [activeKcal, setActiveKcal] = useState<number | undefined>();
   const [birthDate, setBirthDate] = useState<string | undefined>();
+  const [maxHr, setMaxHr] = useState<number | undefined>();
   const [mode, setMode] = useState<EnergyMode | undefined>();
   const [pct, setPct] = useState<number | undefined>();
   const [charts, setCharts] = useState<Set<string>>(loadCharts);
@@ -60,6 +61,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       .then((p) => {
         setName(p.display_name ?? undefined);
         setHeight(p.height_cm ?? undefined);
+        setMaxHr(p.max_hr ?? undefined);
         setMode(p.energy_mode ?? undefined);
         setPct(p.kcal_adjust_pct ?? undefined);
         setProteinGoal(p.protein_goal_g ?? undefined);
@@ -124,6 +126,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       const f = fatGoal === undefined ? null : Math.round(fatGoal);
       if (c !== null && (c < 20 || c > 800)) throw new Error('Kohlenhydrat-Ziel bitte zwischen 20 und 800 g.');
       if (f !== null && (f < 20 || f > 300)) throw new Error('Fett-Ziel bitte zwischen 20 und 300 g.');
+      if (maxHr !== undefined && (maxHr < 120 || maxHr > 230)) throw new Error('Maximalpuls bitte zwischen 120 und 230 bpm.');
       if (pct !== undefined && (pct < -30 || pct > 25)) throw new Error('Kalorien-Anpassung bitte zwischen −30 und +25 %.');
       if (height !== undefined && (height < 100 || height > 250)) throw new Error('Körpergröße bitte zwischen 100 und 250 cm.');
       if (birthDate && (birthDate < '1900-01-01' || ageFrom(birthDate) === undefined || ageFrom(birthDate)! > 120)) throw new Error('Geburtsdatum bitte prüfen.');
@@ -137,6 +140,7 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
         fat_goal_g: f,
         energy_mode: mode ?? null,
         kcal_adjust_pct: pct === undefined ? null : Math.round(pct),
+        max_hr: maxHr === undefined ? null : Math.round(maxHr),
       });
       setCarbsGoal(c ?? undefined);
       setFatGoal(f ?? undefined);
@@ -215,6 +219,15 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
   const endpoint = `${functionsUrl}/health-ingest`;
   const exportEndpoint = `${functionsUrl}/health-export`;
 
+  // Empfehlung für die Tagesziele, folgt dem gewählten Ziel (Protein, Fett, Kohlenhydrate, Kalorien)
+  const basis = proteinBasis(muscle, leanMass);
+  const burn = leanMass !== undefined ? suggestedKcalGoal(leanMass, activeKcal) : undefined;
+  const rec = modeGoals({ energy_mode: mode, kcal_adjust_pct: pct }, basis?.value, burn);
+  const recAll = rec.protein !== undefined && rec.kcal !== undefined && rec.carbs !== undefined && rec.fat !== undefined;
+  const recSame = recAll && proteinGoal === rec.protein && kcalGoal === rec.kcal && carbsGoal === rec.carbs && fatGoal === rec.fat;
+  const hr = maxHeartRate(maxHr, ageFrom(birthDate));
+  const modeName = mode ? ENERGY_MODES[mode].label : 'ohne gewähltes Ziel';
+
   return (
     <div className="space-y-4">
       {error && <ErrorBox>{error}</ErrorBox>}
@@ -234,9 +247,38 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
             max={new Date().toISOString().slice(0, 10)}
             onChange={(e) => setBirthDate(e.target.value || undefined)}
           />
-          {ageFrom(birthDate) !== undefined && <span className="block text-xs text-slate-500 mt-1">{ageFrom(birthDate)} Jahre. Für Maximalpuls und Belastungszonen.</span>}
+          {ageFrom(birthDate) !== undefined && <span className="block text-xs text-slate-500 mt-1">{ageFrom(birthDate)} Jahre.</span>}
         </label>
-        <p className="text-xs text-slate-500">Größe für den BMI, Geburtsdatum für Alter und Maximalpuls. Beides bleibt privat in deinem Profil.</p>
+        <NumberField label="Maximalpuls" unit="bpm" value={maxHr} onChange={setMaxHr} />
+        {hr && (
+          <div className="rounded-xl bg-cyber-black/60 px-3 py-2.5 space-y-1.5">
+            <p className="text-xs text-slate-400">
+              {hr.estimated
+                ? `Leer: Schätzung aus dem Alter, ${hr.value} bpm (208 − 0,7 × Alter, Tanaka 2001). Ein gemessener Wert aus einem harten Lauf oder Test ist genauer, trag ihn oben ein.`
+                : `Eingetragener Wert, ${hr.value} bpm.`}
+            </p>
+            {hr.estimated && (
+              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setMaxHr(hr.value)}>
+                Schätzung übernehmen und danach ändern
+              </button>
+            )}
+            <table className="w-full text-xs tabular-nums">
+              <tbody>
+                {hrZoneRanges(hr.value).map((z) => (
+                  <tr key={z.zone} className="border-t border-white/5 text-slate-300">
+                    <td className="py-1 w-14 font-bold">Zone {z.zone}</td>
+                    <td>{z.name}</td>
+                    <td className="text-right">
+                      {z.lo} bis {z.hi} bpm
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-slate-500">Zonen als Anteil am Maximalpuls (50 bis 100 %). Im Kalender steht bei Trainings mit Puls die Zone dazu.</p>
+          </div>
+        )}
+        <p className="text-xs text-slate-500">Größe für den BMI, Geburtsdatum für das Alter (Körperfett-Formel, Maximalpuls-Schätzung). Alles bleibt privat in deinem Profil.</p>
         <Button variant="ghost" onClick={saveName}>
           Speichern
         </Button>
@@ -368,36 +410,48 @@ const Settings: React.FC<{ session: Session; onDataChanged: () => void }> = ({ s
       </Section>
 
       <Section title="Tagesziele">
-        <p className="text-sm text-slate-400">Erscheinen im Verlauf als Linie und auf der Startseite als Fortschritt. Leer lassen, wenn du kein Ziel willst. Kalorien: Sind Gewicht und Körperfett bekannt, rechnet die Startseite das Tagesziel täglich neu aus Grundumsatz plus aktiven Kalorien. Der Wert hier gilt dann nur für den Verlauf.</p>
+        <p className="text-sm text-slate-400">Erscheinen im Verlauf als Linie und auf der Startseite als Fortschritt. Leer lassen, wenn du kein Ziel willst. Kalorien: Sind Gewicht und Körperfett bekannt, rechnet die Startseite das Tagesziel täglich neu aus Verbrauch plus Anpassung des Ziels. Der Wert hier gilt dann nur für den Verlauf.</p>
         <div className="grid grid-cols-2 gap-2">
           <NumberField label="Protein" unit="g" value={proteinGoal} onChange={setProteinGoal} />
           <NumberField label="Kalorien" unit="kcal" value={kcalGoal} onChange={setKcalGoal} />
           <NumberField label="Kohlenhydrate" unit="g" value={carbsGoal} onChange={setCarbsGoal} />
           <NumberField label="Fett" unit="g" value={fatGoal} onChange={setFatGoal} />
         </div>
-        {(() => {
-          const m = suggestedMacroGoals(kcalGoal, proteinGoal);
-          if (!m || (carbsGoal === m.carbs && fatGoal === m.fat)) return null;
-          return (
-            <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => { setCarbsGoal(m.carbs); setFatGoal(m.fat); }}>
-              Vorschlag aus Kalorien und Protein: {m.carbs} g Kohlenhydrate, {m.fat} g Fett (Fett 30 % der Kalorien, Rest Kohlenhydrate)
-            </button>
-          );
-        })()}
         {leanMass === undefined && muscle === undefined ? (
-          <p className="text-xs text-slate-500">Vorschläge gibt es, sobald Gewicht und Körperfett erfasst sind (Waage oder Apple Health).</p>
+          <p className="text-xs text-slate-500">Empfehlungen gibt es, sobald Gewicht und Körperfett erfasst sind (Waage oder Apple Health).</p>
         ) : (
-          <div className="space-y-1">
-            {proteinBasis(muscle, leanMass) && proteinGoal !== suggestedProteinGoal(proteinBasis(muscle, leanMass)!.value) && (
-              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setProteinGoal(suggestedProteinGoal(proteinBasis(muscle, leanMass)!.value))}>
-                Vorschlag Protein: {suggestedProteinGoal(proteinBasis(muscle, leanMass)!.value)} g (2 g je kg {proteinBasis(muscle, leanMass)!.label}, {proteinBasis(muscle, leanMass)!.value} kg)
+          <div className="rounded-xl bg-cyber-black/60 px-3 py-2.5 space-y-1.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Empfehlung für: {modeName}</p>
+            <ul className="text-xs text-slate-300 space-y-0.5">
+              <li>
+                Protein {rec.protein !== undefined ? `${rec.protein} g` : '–'}: {rec.proteinPerKg.toLocaleString('de-DE')} g je kg {basis?.label ?? 'Magermasse'}
+                {basis ? ` (${basis.value} kg)` : ''}
+              </li>
+              <li>
+                Kalorien {rec.kcal !== undefined ? `${rec.kcal.toLocaleString('de-DE')} kcal` : '–'}: Verbrauch {burn?.toLocaleString('de-DE') ?? '–'} kcal {rec.pct > 0 ? '+' : rec.pct < 0 ? '−' : '±'}
+                {Math.abs(rec.pct)} %
+              </li>
+              <li>
+                Fett {rec.fat !== undefined ? `${rec.fat} g` : '–'}: {rec.fatPct} % der Kalorien
+              </li>
+              <li>Kohlenhydrate {rec.carbs !== undefined ? `${rec.carbs} g` : '–'}: der Rest</li>
+            </ul>
+            {recAll && !recSame && (
+              <button
+                type="button"
+                className="block text-xs font-bold text-cyber-purple underline text-left"
+                onClick={() => {
+                  setProteinGoal(rec.protein);
+                  setKcalGoal(rec.kcal);
+                  setCarbsGoal(rec.carbs);
+                  setFatGoal(rec.fat);
+                }}
+              >
+                Alle Empfehlungen übernehmen, danach speichern
               </button>
             )}
-            {leanMass !== undefined && kcalGoal !== suggestedKcalGoal(leanMass, activeKcal) && (
-              <button type="button" className="block text-xs text-cyber-purple underline text-left" onClick={() => setKcalGoal(suggestedKcalGoal(leanMass, activeKcal))}>
-                Vorschlag Kalorien: {suggestedKcalGoal(leanMass, activeKcal)} kcal (Verbrauch: Grundumsatz{activeKcal ? ` + Ø ${activeKcal} kcal aktiv` : ''})
-              </button>
-            )}
+            {recSame && <p className="text-[11px] text-cyber-green">Deine Ziele entsprechen der Empfehlung.</p>}
+            <p className="text-[11px] text-slate-500">Je größer das Defizit, desto mehr Protein. Spannen nach Helms 2014 und Iraki 2019 (docs/literatur), die Werte je Ziel sind daraus abgeleitet. Wechselst du das Ziel oben, ändert sich die Empfehlung.</p>
           </div>
         )}
         <Button variant="ghost" onClick={saveName}>

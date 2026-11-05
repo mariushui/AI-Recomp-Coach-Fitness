@@ -3,7 +3,7 @@ import { Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Lin
 import { SPORTS, SPORT_LABEL, type Entry, type Sport } from '../supabase/functions/_shared/domain';
 import { listEntries } from '../lib/entries';
 import { average, bmi, dailyStats, movingAverage } from '../lib/stats';
-import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainLabel, strainTarget } from '../lib/recovery';
+import { BALANCE_BAND, BASELINE_DAYS, balanceLabel, balanceSeries, dailyRecovery, dailyStrain, recoveryLabel, sleepScore, strainColor, strainLabel, strainTarget } from '../lib/recovery';
 import RingCalendar, { type RingDay } from './RingCalendar';
 import { SLOTS, SLOT_COLOR, SLOT_LABEL, macroSplitSeries, mealBreakdown, splitBySlot, targetSplit } from '../lib/meals';
 import { MACRO_COLOR as MACRO_COLORS } from '../lib/today';
@@ -20,7 +20,7 @@ import { Card, ErrorBox } from './ui';
 
 const RANGES = [7, 30, 90, 365] as const;
 type Range = (typeof RANGES)[number];
-const RANGE_LABEL: Record<Range, string> = { 7: 'Woche', 30: '30 Tage', 90: '90 Tage', 365: 'Jahr' };
+const RANGE_LABEL: Record<Range, string> = { 7: '7 Tage', 30: '30 Tage', 90: '90 Tage', 365: 'Jahr' };
 
 const RANGE_KEY = 'recomp_trend_range';
 const loadRange = (): Range => {
@@ -175,11 +175,10 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [activityOn, toggleActivity] = useToggleSet(['steps', 'activeKcal', 'exerciseMin']);
   const [heartOn, toggleHeart] = useToggleSet(['restingHr', 'hrv', 'hrRecovery', 'vo2max']);
 
-  // Woche = Kalenderwoche Montag bis Sonntag, inklusive kommender Tage (für den Plan-Schatten)
+  // Immer die letzten N Tage bis heute. Die Zukunft zeigt kein Diagramm, auch nicht bei 7 Tagen.
   const today0 = startOfDay(new Date());
-  const monday = addDays(today0, -((today0.getDay() + 6) % 7));
-  const to = range === 7 ? addDays(monday, 7) : addDays(today0, 1);
-  const from = range === 7 ? monday : addDays(to, -range);
+  const to = addDays(today0, 1);
+  const from = addDays(to, -range);
   const g = granularityFor(range);
 
   useEffect(() => {
@@ -308,9 +307,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const ringDays: RingDay[] = days.map((d: any) => {
     if (ringMode === 'recovery') return { day: d.day, value: d.recovery, max: 100, color: recoveryLabel(d.recovery).color };
     if (ringMode === 'strain') {
-      const l = strainLabel(d.strain);
-      const color = l === 'leicht' ? '#38BDF8' : l === 'moderat' ? '#FBBF24' : l === 'hoch' ? '#FF6B00' : l === 'sehr hoch' ? '#FF375F' : '#475569';
-      return { day: d.day, value: d.strain, max: 10, color };
+      return { day: d.day, value: d.strain, max: 10, color: strainColor(d.strain) };
     }
     const pct = sleepScore(d.sleepH);
     return { day: d.day, value: pct, max: 100, color: '#8B5CF6' };
