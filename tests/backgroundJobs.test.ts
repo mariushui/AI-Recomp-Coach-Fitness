@@ -21,9 +21,20 @@ const store: Record<string, string> = {};
 const updates: any[] = [];
 let failTimes = 0;
 const inserted: any[] = [];
+let insertFailures = 0;
+let hangInsert = false;
+let parseCalls = 0;
 vi.mock('../lib/entries', () => ({
-  insertEntries: vi.fn(async (rows: any[]) => void inserted.push(...rows)),
+  insertEntries: vi.fn(async (rows: any[]) => {
+    if (hangInsert) return new Promise(() => undefined); // Antwort kommt nie an
+    if (insertFailures > 0) {
+      insertFailures--;
+      throw new Error('Datenbank 500');
+    }
+    inserted.push(...rows);
+  }),
   parseText: vi.fn(async (text: string) => {
+    parseCalls++;
     if (text === 'Wetter schön') return { entries: [], questions: [] };
     if (text.startsWith('Frühstück')) return { entries: [{ kind: 'meal', occurred_at: '2026-11-04T08:00:00+01:00', data: { description: 'Haferflocken mit Beeren', protein_g: 20 } }], questions: ['Wie viel Milch?'] };
     if (failTimes > 0) {
@@ -79,6 +90,10 @@ describe('Hintergrund-Aufgaben', () => {
 describe('Erkennen im Hintergrund', () => {
   beforeEach(() => {
     inserted.length = 0;
+    insertFailures = 0;
+    hangInsert = false;
+    parseCalls = 0;
+    for (const k of Object.keys(store)) delete store[k];
   });
   it('speichert die erkannten Einträge mit Herkunft und Originaltext, gibt Rückfragen weiter', async () => {
     const { addParseJob, runJobs, subscribeJobs } = await import('../lib/backgroundJobs');
@@ -88,7 +103,9 @@ describe('Erkennen im Hintergrund', () => {
     await runJobs();
     await new Promise((r) => setTimeout(r, 10));
     off();
-    expect(inserted).toEqual([{ kind: 'meal', occurred_at: '2026-11-04T08:00:00+01:00', data: { description: 'Haferflocken mit Beeren', protein_g: 20 }, source: 'voice', raw_text: 'Frühstück Haferflocken' }]);
+    expect(inserted).toEqual([
+      { kind: 'meal', occurred_at: '2026-11-04T08:00:00+01:00', data: { description: 'Haferflocken mit Beeren', protein_g: 20 }, source: 'voice', raw_text: 'Frühstück Haferflocken', external_id: expect.stringMatching(/^parse:.*:0$/) },
+    ]);
     expect(done[0].summary).toBe('Gespeichert: Haferflocken mit Beeren');
     expect(done[0].questions).toEqual(['Wie viel Milch?']);
   });
@@ -98,5 +115,44 @@ describe('Erkennen im Hintergrund', () => {
     await runJobs();
     await new Promise((r) => setTimeout(r, 10));
     expect(inserted[0]).toMatchObject({ kind: 'note', data: { text: 'Wetter schön' } });
+  });
+});
+
+describe('Wenn die Antwort des Servers nicht ankommt', () => {
+  beforeEach(() => {
+    inserted.length = 0;
+    insertFailures = 0;
+    hangInsert = false;
+    parseCalls = 0;
+    for (const k of Object.keys(store)) delete store[k];
+  });
+  it('Speichern schlägt fehl: die KI läuft beim Wiederholen nicht nochmal, der Eintrag entsteht einmal', async () => {
+    vi.useFakeTimers();
+    const { addParseJob, runJobs, pendingJobs } = await import('../lib/backgroundJobs');
+    insertFailures = 1;
+    addParseJob('Frühstück Birne', 'text');
+    const p = runJobs();
+    await vi.runAllTimersAsync();
+    await p;
+    vi.useRealTimers();
+    expect(parseCalls).toBe(1);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].external_id).toMatch(/^parse:/);
+    expect(pendingJobs()).toHaveLength(0);
+  });
+  it('keine Antwort nach 10 Sekunden: Eintrag geht in die Warteschlange, der Auftrag ist erledigt', async () => {
+    vi.useFakeTimers();
+    const { addParseJob, pendingJobs, subscribeJobs } = await import('../lib/backgroundJobs');
+    const { queuedCount } = await import('../lib/offlineQueue');
+    const done: any[] = [];
+    subscribeJobs((e) => e.type === 'done' && done.push(e));
+    hangInsert = true;
+    addParseJob('Frühstück Mandarine', 'text');
+    await vi.advanceTimersByTimeAsync(11_000);
+    vi.useRealTimers();
+    expect(done).toHaveLength(1);
+    expect(done[0].summary).toBe('Auf dem Gerät gespeichert: Haferflocken mit Beeren, wird gesendet');
+    expect(queuedCount()).toBe(1);
+    expect(pendingJobs()).toHaveLength(0);
   });
 });

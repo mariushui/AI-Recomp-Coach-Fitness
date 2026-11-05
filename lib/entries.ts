@@ -51,8 +51,8 @@ export async function insertEntries(entries: NewEntry[]): Promise<void> {
   if (entries.length === 0) return;
   const rest: NewEntry[] = [];
   for (const e of entries) {
-    // Kraft aus der Eingabe hat eine eigene external_id (gegen doppeltes Speichern), darf aber trotzdem mit Apple zusammengehen
-    const mergeable = !e.external_id || e.external_id.startsWith('kraft:') || e.external_id.startsWith('training:');
+    // Eingaben aus der App tragen eine eigene external_id (gegen doppeltes Speichern), dürfen aber trotzdem mit Apple zusammengehen
+    const mergeable = !e.external_id || /^(kraft|training|app|parse):/.test(e.external_id);
     if (e.kind === 'workout' && mergeable && (await mergeIntoAppleWorkout(e as NewEntry<'workout'>))) continue;
     rest.push(e);
   }

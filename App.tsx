@@ -11,6 +11,7 @@ import JobToast from './components/JobToast';
 import { insertEntries, listStrengthHistory } from './lib/entries';
 import { cacheHistory } from './lib/strengthTemplates';
 import { flush, queuedCount } from './lib/offlineQueue';
+import { dayKey } from './lib/time';
 
 const loadTrends = () => import('./components/Trends');
 const loadStrength = () => import('./components/TrainingView');
@@ -48,6 +49,8 @@ function App() {
   const [tab, setTab] = useState<Tab>('log');
   const [refreshKey, setRefreshKey] = useState(0);
   const [waiting, setWaiting] = useState(() => queuedCount());
+  // Tag der Anzeige. Wechselt er (App lag über Nacht im Speicher), startet die Ansicht neu und zeigt wieder heute.
+  const [dayStamp, setDayStamp] = useState(() => dayKey(new Date()));
   const bump = useCallback(() => {
     setRefreshKey((k) => k + 1);
     setWaiting(queuedCount());
@@ -68,6 +71,14 @@ function App() {
         .catch(() => undefined);
     send();
     window.addEventListener('online', send);
+    const visible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void send();
+      // Zurück im Vordergrund: neuen Tag übernehmen und alle Anzeigen neu laden. iOS hält die App oft stundenlang im Speicher.
+      setDayStamp(dayKey(new Date()));
+      setRefreshKey((k) => k + 1);
+    };
+    document.addEventListener('visibilitychange', visible);
     // Seiten mit Diagrammen vorab laden, damit sie der Service Worker auch für den Keller im Speicher hat
     const t = setTimeout(() => {
       loadStrength().catch(() => undefined);
@@ -76,6 +87,7 @@ function App() {
     }, 3000);
     return () => {
       window.removeEventListener('online', send);
+      document.removeEventListener('visibilitychange', visible);
       clearTimeout(t);
     };
   }, [session]);
@@ -134,7 +146,7 @@ function App() {
         {waiting > 0 && <p className="text-[11px] text-amber-300 mt-0.5">{waiting} {waiting === 1 ? 'Eintrag wartet' : 'Einträge warten'} auf Netz</p>}
       </header>
 
-      <main className="max-w-xl mx-auto px-4 pt-4">
+      <main key={dayStamp} className="max-w-xl mx-auto px-4 pt-4">
         {tab === 'log' && <QuickLog onSaved={bump} refreshKey={refreshKey} />}
         {tab === 'nutrition' && (
           <Suspense fallback={<p className="text-sm text-slate-500">Lade …</p>}>
