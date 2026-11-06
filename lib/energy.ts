@@ -31,6 +31,9 @@ export function kcalPerMinute(entries: Pick<Entry, 'kind' | 'data'>[]): Record<S
   return out;
 }
 
+/** Tage mit mehr als diesem Vielfachen des unteren Medians gelten als Trainingstage und zählen nicht zum Alltag. */
+export const ROBUST_FACTOR = 1.3;
+
 const workoutKcal = (w: WorkoutData, rates: Record<Sport, number>) => w.kcal ?? (w.duration_min ? w.duration_min * rates[w.sport] : 0);
 
 export interface ActiveEstimate {
@@ -56,7 +59,14 @@ export function estimateActiveToday(days: DayStats[], entries: Entry[], now: Dat
   }
   const withoutTraining = (d: DayStats) => Math.max(0, d.activeKcal! - (trainingByDay.get(d.day) ?? 0));
   const hasValue = (d: DayStats | undefined): d is DayStats => !!d && typeof d.activeKcal === 'number' && d.activeKcal > 0;
-  const mean = (l: number[]) => Math.round(l.reduce((a, b) => a + b, 0) / l.length);
+  // Robuster Alltag: Tage mit Training, das nicht als Eintrag vorliegt, stechen nach oben heraus (über 130 % vom unteren Median)
+  // und blieben sonst im Alltag stecken. Dann würde das Training heute ein zweites Mal addiert.
+  const mean = (l: number[]) => {
+    const sorted = [...l].sort((a, b) => a - b);
+    const ref = sorted[Math.floor((sorted.length - 1) / 2)];
+    const kept = sorted.filter((v) => v <= ref * ROBUST_FACTOR);
+    return Math.round(kept.reduce((a, b) => a + b, 0) / kept.length);
+  };
   const n = days.length;
   const sameWeekday = [7, 14, 21].map((k) => days[n - 1 - k]).filter(hasValue).map(withoutTraining);
   const recent = days.slice(-15, -1).filter(hasValue).map(withoutTraining);

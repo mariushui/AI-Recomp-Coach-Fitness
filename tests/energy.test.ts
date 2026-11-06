@@ -44,3 +44,16 @@ describe('Alltag nach Wochentag', () => {
     expect(r.base).toBe(1000);
   });
 });
+
+describe('Alltag ohne Ausreißer durch nicht erfasstes Training', () => {
+  it('Trainingstag ohne Eintrag fließt nicht in den Alltag', () => {
+    // 3.11. hat 619, davon ist ein Training ohne Eintrag. 4.11. 280, 5.11. 300 (Alltag um 290).
+    const days = [day('2026-11-02', 280), day('2026-11-03', 900), day('2026-11-04', 300), day('2026-11-05', 40)];
+    const r = estimateActiveToday(days, [], new Date('2026-11-05T07:00:00+01:00'));
+    expect(r.base).toBe(290); // 900 liegt über 130 % von 280 und zählt nicht
+  });
+  it('zwei Tage: der niedrigere gilt als Alltag, wenn der andere deutlich höher ist', () => {
+    const days = [day('2026-11-03', 669), day('2026-11-04', 249), day('2026-11-05', 84)];
+    expect(estimateActiveToday(days, [], new Date('2026-11-05T07:00:00+01:00')).base).toBe(249);
+  });
+});
