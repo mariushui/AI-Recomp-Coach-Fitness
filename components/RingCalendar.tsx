@@ -75,9 +75,31 @@ const Ring: React.FC<{ d: RingDay; today: boolean; selected?: boolean; onSelect?
   );
 };
 
-/** days: aufsteigend sortiert, lückenlos. Die erste Woche wird links mit Leerfeldern aufgefüllt. */
-const RingCalendar: React.FC<{ days: RingDay[]; today: string; selected?: string; onSelect?: (day: string) => void }> = ({ days, today, selected, onSelect }) => {
+/**
+ * days: aufsteigend sortiert, lückenlos. Standard: Wochenraster Mo bis So, erste Woche links aufgefüllt.
+ * row: eine Reihe, neuester Tag rechts, Wochentag steht über jedem Ring und wandert mit.
+ */
+const RingCalendar: React.FC<{ days: RingDay[]; today: string; selected?: string; onSelect?: (day: string) => void; row?: boolean }> = ({ days, today, selected, onSelect, row }) => {
   if (days.length === 0) return null;
+  if (row) {
+    const cols = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` };
+    return (
+      <div>
+        <div className="grid gap-1 mb-1" style={cols}>
+          {days.map((d) => (
+            <span key={d.day} className={`text-center text-[10px] font-bold uppercase tracking-wider ${d.day === today ? 'text-cyber-green' : 'text-slate-500'}`}>
+              {WEEKDAYS[weekdayIndex(d.day)]}
+            </span>
+          ))}
+        </div>
+        <div className="grid gap-1" style={cols}>
+          {days.map((d) => (
+            <Ring key={d.day} d={d} today={d.day === today} selected={d.day === selected} onSelect={onSelect} />
+          ))}
+        </div>
+      </div>
+    );
+  }
   const pad = weekdayIndex(days[0].day);
   const cells: (RingDay | null)[] = [...Array(pad).fill(null), ...days];
   return (
