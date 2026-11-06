@@ -153,7 +153,7 @@ const has = (rows: Record<string, any>[], k: string) => rows.some((r) => typeof 
 
 const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
   const [range, setRangeState] = useState<Range>(loadRange);
-  const [ringMode, setRingMode] = useState<'recovery' | 'strain' | 'sleep'>('recovery');
+  const [ringMode, setRingMode] = useState<'recovery' | 'strain' | 'sleep'>('strain');
   const [mealSlots, toggleMealSlot] = useToggleSet([...SLOTS]);
   const setRange = (r: Range) => {
     setRangeState(r);

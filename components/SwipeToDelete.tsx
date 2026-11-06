@@ -1,14 +1,18 @@
 // Wischen nach links legt einen roten Löschen-Knopf frei, wie in iOS-Listen.
+// Mit onSwap legt Wischen nach rechts links einen zweiten Knopf frei, z. B. Tauschen.
 // Tippen auf den Inhalt, solange der Knopf offen ist, schließt ihn nur.
 import React, { useRef, useState } from 'react';
 
 const BUTTON_W = 96;
 
-const SwipeToDelete: React.FC<{ onDelete: () => void; label?: string; children: React.ReactNode; className?: string }> = ({
+const SwipeToDelete: React.FC<{ onDelete: () => void; label?: string; children: React.ReactNode; className?: string; onSwap?: () => void; swapLabel?: string; bg?: string }> = ({
   onDelete,
   label = 'Löschen',
   children,
   className = '',
+  onSwap,
+  swapLabel = 'Tauschen',
+  bg = 'bg-cyber-black',
 }) => {
   const [x, setX] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -31,10 +35,10 @@ const SwipeToDelete: React.FC<{ onDelete: () => void; label?: string; children: 
     if (!horizontal.current) return;
     moved.current = true;
     setDragging(true);
-    setX(Math.min(0, Math.max(-BUTTON_W * 1.4, start.current.base + dx)));
+    setX(Math.min(onSwap ? BUTTON_W * 1.4 : 0, Math.max(-BUTTON_W * 1.4, start.current.base + dx)));
   };
   const onTouchEnd = () => {
-    if (horizontal.current) setX((cur) => (cur < -BUTTON_W / 2 ? -BUTTON_W : 0));
+    if (horizontal.current) setX((cur) => (cur < -BUTTON_W / 2 ? -BUTTON_W : cur > BUTTON_W / 2 ? BUTTON_W : 0));
     setDragging(false);
     start.current = null;
   };
@@ -57,18 +61,33 @@ const SwipeToDelete: React.FC<{ onDelete: () => void; label?: string; children: 
           onDelete();
         }}
         className="absolute inset-y-0 right-0 flex items-center justify-center bg-[#FF375F] text-white text-sm font-bold"
-        style={{ width: BUTTON_W }}
+        style={{ width: BUTTON_W, visibility: x < 0 ? 'visible' : 'hidden' }}
         aria-label={label}
         tabIndex={x === 0 ? -1 : 0}
       >
         {label}
       </button>
+      {onSwap && (
+        <button
+          type="button"
+          onClick={() => {
+            setX(0);
+            onSwap();
+          }}
+          className="absolute inset-y-0 left-0 flex items-center justify-center bg-cyber-purple text-white text-sm font-bold"
+          style={{ width: BUTTON_W, visibility: x > 0 ? 'visible' : 'hidden' }}
+          aria-label={swapLabel}
+          tabIndex={x === 0 ? -1 : 0}
+        >
+          {swapLabel}
+        </button>
+      )}
       <div
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onClickCapture={onClickCapture}
-        className="relative bg-cyber-black"
+        className={`relative ${bg}`}
         style={{ transform: `translateX(${x}px)`, transition: dragging ? 'none' : 'transform 180ms ease-out', touchAction: 'pan-y' }}
       >
         {children}
