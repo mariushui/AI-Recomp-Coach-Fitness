@@ -142,7 +142,14 @@ const TodayBar: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
           ratio={strain !== undefined ? strain / 10 : null}
           target={target ? { lo: target.lo / 10, hi: target.hi / 10 } : null}
         />
-        <Tile label="Verbrauch" value={burned !== undefined ? fmtKcal(burned) : undefined} unit="kcal" sub={burned === undefined ? 'braucht Apple Health' : estimated ? 'geschätzt mit Plan' : 'Grundumsatz + aktiv heute'} color="#FB923C" ratio={burned !== undefined && s.kcal !== undefined ? s.kcal / burned : null} />
+        <Tile
+          label="Verbrauch"
+          value={burned !== undefined ? fmtKcal(s.kcal ?? 0) : undefined}
+          unit={burned !== undefined ? `/ ${fmtKcal(burned)} kcal` : undefined}
+          sub={burned === undefined ? 'braucht Apple Health' : 'gegessen von Verbrauch'}
+          color="#FB923C"
+          ratio={burned !== undefined ? (s.kcal ?? 0) / burned : null}
+        />
       </div>
     </div>
   );

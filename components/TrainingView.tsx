@@ -18,6 +18,8 @@ import { flush, queuedCount } from '../lib/offlineQueue';
 import { addDays, weekKey } from '../lib/time';
 import StrengthLogger, { draftFromTemplate, type StrengthDraft } from './StrengthLogger';
 import { Card } from './ui';
+import SwipeToDelete from './SwipeToDelete';
+import { removePlan, swapPlanSport } from '../lib/planActions';
 
 const KIND_COLOR: Record<SessionKind, string> = {
   push: '#8B5CF6',
@@ -56,6 +58,17 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
   const [skillLogger, setSkillLogger] = useState<SkillDraft | null>(null);
   const [hasSkillDraft, setHasSkillDraft] = useState(() => !!loadSkillDraft());
   const [pickFor, setPickFor] = useState<Entry<'plan'> | null>(null);
+  const [swapFor, setSwapFor] = useState<Entry<'plan'> | null>(null);
+  // Wischen in "Als Nächstes": sofort aus der Liste nehmen, dann speichern und neu laden
+  const changePlan = (plan: Entry<'plan'>, action: () => Promise<void>) => {
+    setTraining((t) => ({ ...t, range: t.range.filter((e) => e.id !== plan.id) }));
+    action()
+      .then(onSaved)
+      .catch((e: any) => {
+        setNote(`Nicht gespeichert: ${e?.message ?? e}`);
+        onSaved();
+      });
+  };
   const [chooser, setChooser] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const templates = useMemo(loadTemplates, [logger]);
@@ -226,7 +239,7 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
 
       <Card>
         <div className="flex items-start justify-between gap-2">
-          <Title sub={upcoming.length ? 'Aus deinem Trainingsplan. Antippen, um während des Trainings einzutragen.' : 'Im Plan steht für die nächsten 2 Wochen nichts.'}>Als Nächstes</Title>
+          <Title sub={upcoming.length ? 'Aus deinem Trainingsplan. Antippen zum Eintragen. Nach links wischen entfernt, nach rechts tauscht die Sportart.' : 'Im Plan steht für die nächsten 2 Wochen nichts.'}>Als Nächstes</Title>
           <button type="button" onClick={() => setShowPlan(true)} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-xs font-bold text-slate-300">
             Plan bearbeiten
           </button>
@@ -237,11 +250,11 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
             const Icon = SPORT_ICON[p.sport];
             const t = p.sport === 'kraft' ? matchTemplate(s.plan, templates, memory) : undefined;
             return (
+              <SwipeToDelete key={s.plan.id} className="!rounded-xl" bg="bg-cyber-gray" label="Entfernen" onDelete={() => changePlan(s.plan, () => removePlan(s.plan))} onSwap={() => setSwapFor(s.plan)}>
               <button
-                key={s.plan.id}
                 type="button"
                 onClick={() => openPlan(s.plan)}
-                className={`w-full flex items-center gap-3 rounded-xl px-2 py-2.5 text-left ${i === 0 ? 'bg-cyber-purple/15 border border-cyber-purple/40' : 'border-t border-white/5'}`}
+                className={`w-full flex items-center gap-3 rounded-xl px-2 py-2.5 text-left ${i === 0 ? 'bg-[#1a1530] border border-cyber-purple/40' : 'border-t border-white/5'}`}
               >
                 <Icon size={26} className={i === 0 ? 'text-cyber-purple' : 'text-slate-400'} />
                 <span className="flex-1 min-w-0">
@@ -255,6 +268,7 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
                 </span>
                 <span className={`text-xs font-bold shrink-0 ${i === 0 ? 'text-cyber-green' : 'text-slate-500'}`}>{i === 0 ? 'Start' : '›'}</span>
               </button>
+              </SwipeToDelete>
             );
           })}
         </div>
@@ -445,6 +459,37 @@ const TrainingView: React.FC<{ refreshKey: number; onSaved: () => void }> = ({ r
             </div>
           </Card>
         </>
+      )}
+
+      {swapFor && (
+        <div className="fixed inset-0 z-40 bg-black/70 flex items-end" onClick={() => setSwapFor(null)}>
+          <div className="w-full max-w-xl mx-auto rounded-t-3xl bg-cyber-gray border-t border-white/10 p-4 pb-[max(env(safe-area-inset-bottom),16px)] space-y-2" onClick={(e) => e.stopPropagation()}>
+            <p className="font-display font-bold text-slate-100">Tauschen gegen</p>
+            <p className="text-[11px] text-slate-500">Nur für {whenLabel(swapFor.occurred_at)}. Dein Wochenplan bleibt.</p>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {(Object.keys(SPORT_LABEL) as Sport[])
+                .filter((sp) => sp !== (swapFor.data as PlanData).sport && sp !== 'sonstiges')
+                .map((sp) => {
+                  const Icon = SPORT_ICON[sp];
+                  return (
+                    <button
+                      key={sp}
+                      type="button"
+                      onClick={() => {
+                        const plan = swapFor;
+                        setSwapFor(null);
+                        changePlan(plan, () => swapPlanSport(plan, sp));
+                      }}
+                      className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-3 text-sm font-bold text-slate-100"
+                    >
+                      <Icon size={22} className="text-slate-400" />
+                      {SPORT_LABEL[sp]}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
       )}
 
       {logger && (
