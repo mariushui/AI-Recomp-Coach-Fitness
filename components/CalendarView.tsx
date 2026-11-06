@@ -59,6 +59,8 @@ const weekStart = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
 
 const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({ refreshKey, onChanged }) => {
   const [day, setDay] = useState(() => startOfDay(new Date()));
+  // Ende des Ring-Fensters: 7 Tage bis einschließlich diesem Tag, Standard heute
+  const [end, setEnd] = useState(() => startOfDay(new Date()));
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,10 +142,10 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
     return out;
   }, [states, entries]);
 
-  const monthStartKey = `${monthKey}-01`;
-  const nextMonthKey = dayKey(new Date(day.getFullYear(), day.getMonth() + 1, 1));
+  const endKey = dayKey(end);
+  const startKey = dayKey(addDays(end, -6));
   const ringDays: RingDay[] = allDays
-    .filter((d) => d.day >= monthStartKey && d.day < nextMonthKey)
+    .filter((d) => d.day >= startKey && d.day <= endKey)
     .map((d) => {
       const ring =
         ringMode === 'training'
@@ -162,10 +164,15 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
     kcal: kcalTargets.get(dayStr) ?? profile?.kcal_goal ?? undefined,
   };
 
-  const shiftMonth = (n: number) => {
-    const t = new Date(day.getFullYear(), day.getMonth() + n, 1);
-    setDay(t.getFullYear() === today.getFullYear() && t.getMonth() === today.getMonth() ? today : t);
+  // Fenster wochenweise verschieben, nie über heute hinaus
+  const shiftWeek = (n: number) => {
+    const t = addDays(end, 7 * n);
+    const e = t > today ? today : t;
+    setEnd(e);
+    setDay(e);
   };
+  const atToday = endKey === todayKey;
+  const short = (k: string) => `${Number(k.slice(8, 10))}.${Number(k.slice(5, 7))}.`;
   const selectDay = (k: string) => {
     setDay(startOfDay(new Date(`${k}T12:00:00`)));
     // Zum Tag springen, sonst liegt er unter dem Kalender außerhalb des Bildschirms
@@ -322,16 +329,22 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
         <span className="text-cyber-purple text-sm font-bold flex items-center gap-1">bearbeiten <Icons.Right size={14} weight="bold" /></span>
       </button>
 
-      {/* Monat als Ring-Kalender */}
+      {/* Letzte 7 Tage als Ring-Reihe, heute rechts */}
       <div className="flex items-center justify-between">
-        <button className="h-10 w-10 rounded-full bg-white/5" onClick={() => shiftMonth(-1)} aria-label="Vormonat">
+        <button className="h-10 w-10 rounded-full bg-white/5" onClick={() => shiftWeek(-1)} aria-label="7 Tage zurück">
           <Icons.Left size={18} className="mx-auto" />
         </button>
-        <button className="text-center" onClick={() => setDay(today)}>
-          <div className="font-display font-bold text-slate-100">{new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}</div>
-          {!(day.getFullYear() === today.getFullYear() && day.getMonth() === today.getMonth() && isToday) && <div className="text-xs text-cyber-purple">zu heute</div>}
+        <button
+          className="text-center"
+          onClick={() => {
+            setEnd(today);
+            setDay(today);
+          }}
+        >
+          <div className="font-display font-bold text-slate-100">{atToday ? 'Letzte 7 Tage' : `${short(startKey)} bis ${short(endKey)}`}</div>
+          {!(atToday && isToday) && <div className="text-xs text-cyber-purple">zu heute</div>}
         </button>
-        <button className="h-10 w-10 rounded-full bg-white/5" onClick={() => shiftMonth(1)} aria-label="Folgemonat">
+        <button className="h-10 w-10 rounded-full bg-white/5 disabled:opacity-30" onClick={() => shiftWeek(1)} disabled={atToday} aria-label="7 Tage vor">
           <Icons.Right size={18} className="mx-auto" />
         </button>
       </div>
@@ -353,7 +366,7 @@ const CalendarView: React.FC<{ refreshKey: number; onChanged: () => void }> = ({
         )}
       </div>
 
-      <RingCalendar days={ringDays} today={todayKey} selected={dayStr} onSelect={selectDay} />
+      <RingCalendar row days={ringDays} today={todayKey} selected={dayStr} onSelect={selectDay} />
       <p className="text-[11px] text-slate-500 -mt-2">
         {ringMode === 'training'
           ? 'Ring = Belastung des Tages von 0 bis 10 (blau leicht, gelb moderat, orange hoch, rot sehr hoch). '

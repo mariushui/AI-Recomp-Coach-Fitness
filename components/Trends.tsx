@@ -335,7 +335,7 @@ const Trends: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
             </div>
           }
         >
-          <RingCalendar days={ringDays} today={todayKey} />
+          <RingCalendar row={range <= 7} days={ringDays} today={todayKey} />
         </Chart>
       ),
     body: show('body') && has(rows, 'weight') && (
